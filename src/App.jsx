@@ -210,6 +210,24 @@ function IncomeRow({incAvail,settings,editIncome,setEditIncome,tempVal,setTempVa
 }
 
 function TxForm({txForm,setTxForm,splitPeople,setSplitPeople,addTx,setShowTxForm,cats}){
+  const perShare = txForm.isSplit && txForm.totalBill && txForm.splitCount
+    ? (parseFloat(txForm.totalBill)||0) / txForm.splitCount : 0;
+
+  const setTotal = total => {
+    const share = total && txForm.splitCount ? ((parseFloat(total)||0)/txForm.splitCount).toFixed(2) : "";
+    setTxForm({...txForm, totalBill:total, amount:share});
+  };
+  const setSplitCount = n => {
+    const next = Math.max(2, n);
+    const share = txForm.totalBill ? ((parseFloat(txForm.totalBill)||0)/next).toFixed(2) : "";
+    setTxForm({...txForm, splitCount:next, amount:share});
+    setSplitPeople(prev => {
+      const arr = [...prev];
+      while(arr.length < next-1) arr.push({name:"",owes:0,paid:false});
+      return arr.slice(0, next-1);
+    });
+  };
+
   return (
     <div style={{...S.card,marginBottom:14,border:"1.5px solid #AFA9EC"}}>
       <div style={S.ptitle}>New transaction</div>
@@ -224,44 +242,67 @@ function TxForm({txForm,setTxForm,splitPeople,setSplitPeople,addTx,setShowTxForm
           <select style={S.sel} value={txForm.cat} onChange={e=>setTxForm({...txForm,cat:e.target.value})}>
             {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
           </select></div>
-        <div><div style={S.slabel}>Amount ($)</div>
-          <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={txForm.amount}
-            onChange={e=>setTxForm({...txForm,amount:e.target.value})}
-            onKeyDown={e=>e.key==="Enter"&&!txForm.isSplit&&addTx()}/></div>
+        <div><div style={S.slabel}>{txForm.isSplit ? "Total bill ($)" : "Amount ($)"}</div>
+          {txForm.isSplit
+            ? <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={txForm.totalBill} onChange={e=>setTotal(e.target.value)}/>
+            : <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={txForm.amount}
+                onChange={e=>setTxForm({...txForm,amount:e.target.value})}
+                onKeyDown={e=>e.key==="Enter"&&addTx()}/>
+          }
+        </div>
       </div>
       <div style={{display:"flex",gap:10,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
         <input type="text" style={{...S.input,flex:1,minWidth:140}} placeholder="Note (optional)" value={txForm.note}
           onChange={e=>setTxForm({...txForm,note:e.target.value})}/>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#534AB7",fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-          <input type="checkbox" checked={txForm.isSplit} onChange={e=>setTxForm({...txForm,isSplit:e.target.checked,cat:e.target.checked?"split":txForm.cat})}/>
+          <input type="checkbox" checked={txForm.isSplit} onChange={e=>{
+            setTxForm({...txForm,isSplit:e.target.checked,cat:e.target.checked?"split":txForm.cat,splitCount:2,totalBill:"",amount:""});
+            setSplitPeople([{name:"",owes:0,paid:false}]);
+          }}/>
           Split with friends
         </label>
       </div>
       {txForm.isSplit&&(
-        <div style={{background:"#E3F2FD22",border:"1px solid #90CAF944",borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#1565C0",marginBottom:10}}>Split details</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-            <div><div style={S.slabel}>Total bill</div>
-              <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={txForm.totalBill}
-                onChange={e=>setTxForm({...txForm,totalBill:e.target.value})}/></div>
-            <div><div style={S.slabel}>Your share</div>
-              <div style={{fontSize:12,color:"#888780",padding:"8px 0"}}>{c2(parseFloat(txForm.amount)||0)}</div></div>
+        <div style={{background:"#E3F2FD22",border:"1px solid #90CAF944",borderRadius:8,padding:"14px",marginBottom:10}}>
+          {/* Stepper */}
+          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:12,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#1565C0"}}>Split how many ways?</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <button type="button" onClick={()=>setSplitCount(txForm.splitCount-1)}
+                style={{width:32,height:32,borderRadius:"50%",border:"1.5px solid #1565C0",background:"#FFF",color:"#1565C0",fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>−</button>
+              <span style={{fontSize:22,fontWeight:700,minWidth:28,textAlign:"center",color:"#1E2130"}}>{txForm.splitCount}</span>
+              <button type="button" onClick={()=>setSplitCount(txForm.splitCount+1)}
+                style={{width:32,height:32,borderRadius:"50%",border:"1.5px solid #1565C0",background:"#1565C0",color:"#FFF",fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
+            </div>
+            {perShare>0&&(
+              <div style={{background:"#E1F5EE",border:"1px solid #5DCAA5",borderRadius:8,padding:"6px 14px",fontSize:12}}>
+                <span style={{fontWeight:700,color:"#085041"}}>{c2(perShare)}</span>
+                <span style={{color:"#888780",marginLeft:6}}>each ({txForm.splitCount} ways)</span>
+              </div>
+            )}
           </div>
-          {splitPeople.map((p,i)=>(
+          {/* Your share summary */}
+          {perShare>0&&(
+            <div style={{fontSize:11,color:"#534AB7",fontWeight:500,marginBottom:10}}>
+              Your share: <strong>{c2(perShare)}</strong> · {txForm.splitCount-1} {txForm.splitCount-1===1?"person":"people"} each owe <strong>{c2(perShare)}</strong>
+            </div>
+          )}
+          {/* Optional names */}
+          <div style={{fontSize:10,color:"#888780",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Name the others (optional)</div>
+          {Array.from({length:txForm.splitCount-1},(_,i)=>(
             <div key={i} style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}>
-              <input type="text" style={{...S.input,flex:1}} placeholder={`Friend ${i+1}`}
-                value={p.name} onChange={e=>{const n=[...splitPeople];n[i]={...n[i],name:e.target.value};setSplitPeople(n);}}/>
-              <input type="number" inputMode="decimal" style={{...S.input,width:90}} placeholder="Owes $"
-                value={p.owes||""} onChange={e=>{const n=[...splitPeople];n[i]={...n[i],owes:parseFloat(e.target.value)||0};setSplitPeople(n);}}/>
-              {splitPeople.length>1&&<button style={{...S.btn("#A32D2D"),padding:"5px 8px"}} onClick={()=>setSplitPeople(splitPeople.filter((_,j)=>j!==i))}>✕</button>}
+              <span style={{fontSize:11,color:"#888780",minWidth:56}}>Person {i+1}</span>
+              <input type="text" style={{...S.input,flex:1}} placeholder="Name (optional)"
+                value={splitPeople[i]?.name||""}
+                onChange={e=>{const n=[...splitPeople];while(n.length<=i)n.push({name:"",owes:0,paid:false});n[i]={...n[i],name:e.target.value};setSplitPeople(n);}}/>
+              {perShare>0&&<span style={{fontSize:12,fontWeight:600,color:"#1565C0",whiteSpace:"nowrap"}}>{c2(perShare)}</span>}
             </div>
           ))}
-          <button style={S.btn("#1565C0")} onClick={()=>setSplitPeople([...splitPeople,{name:"",owes:0,paid:false}])}>+ Add person</button>
         </div>
       )}
       <div style={{display:"flex",gap:8}}>
         <button style={S.btnS("#534AB7")} onClick={addTx}>Add →</button>
-        <button style={S.btn("#888780")} onClick={()=>{setShowTxForm(false);setTxForm({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});setSplitPeople([{name:"",owes:0,paid:false}]);}}>Cancel</button>
+        <button style={S.btn("#888780")} onClick={()=>{setShowTxForm(false);setTxForm({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:"",splitCount:2});setSplitPeople([{name:"",owes:0,paid:false}]);}}>Cancel</button>
       </div>
     </div>
   );
@@ -369,7 +410,7 @@ export default function App(){
   const [showExport,      setShowExport]      = useState(false);
   const [editIncome,      setEditIncome]      = useState(null);
   const [tempVal,         setTempVal]         = useState("");
-  const [txForm,          setTxForm]          = useState({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});
+  const [txForm,          setTxForm]          = useState({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:"",splitCount:2});
   const [splitPeople,     setSplitPeople]     = useState([{name:"",owes:0,paid:false}]);
   const [txSearch,        setTxSearch]        = useState("");
   const [editTxId,        setEditTxId]        = useState(null);
@@ -475,15 +516,23 @@ export default function App(){
   };
 
   const addTx=()=>{
-    if(!txForm.merchant||!txForm.amount) return;
-    const tx={id:Date.now(),date:txForm.date,merchant:txForm.merchant,cat:txForm.cat,amount:parseFloat(txForm.amount)||0,
+    if(!txForm.merchant) return;
+    if(txForm.isSplit&&!txForm.totalBill) return;
+    if(!txForm.isSplit&&!txForm.amount) return;
+    const perShare=txForm.isSplit?(parseFloat(txForm.totalBill)||0)/txForm.splitCount:0;
+    const tx={id:Date.now(),date:txForm.date,merchant:txForm.merchant,cat:txForm.cat,
+      amount:txForm.isSplit?perShare:parseFloat(txForm.amount)||0,
       note:txForm.note,isSplit:txForm.isSplit,isReimb:false,
-      splitWith:txForm.isSplit?splitPeople.filter(p=>p.name).map(p=>({...p,paid:false})):[],
+      splitWith:txForm.isSplit
+        ?Array.from({length:txForm.splitCount-1},(_,i)=>({
+            name:splitPeople[i]?.name||`Person ${i+1}`,
+            owes:perShare,paid:false}))
+        :[],
       totalBill:txForm.isSplit?parseFloat(txForm.totalBill)||0:0};
     const key=mkKey(vy,vm); const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
     const next={...monthData,[key]:{...ex,transactions:[...(ex.transactions||[]),tx]}};
     setMonthData(next); save("v3_md",next);
-    setTxForm({date:now.toISOString().split("T")[0],merchant:"",cat:txForm.cat,amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});
+    setTxForm({date:now.toISOString().split("T")[0],merchant:"",cat:txForm.cat,amount:"",note:"",isSplit:false,splitWith:[],totalBill:"",splitCount:2});
     setSplitPeople([{name:"",owes:0,paid:false}]); setShowTxForm(false);
   };
 
