@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { storage } from "./storage.js";
 
-const CATS = [
+const DEFAULT_CATS = [
   { id:"housing",   label:"Housing",        color:"#185FA5", bg:"#E6F1FB" },
   { id:"groceries", label:"Groceries",      color:"#3B6D11", bg:"#EAF3DE" },
   { id:"dining",    label:"Dining Out",     color:"#854F0B", bg:"#FAEEDA" },
@@ -26,33 +26,43 @@ const DEFAULT_JOB_START   = "2026-07-20";
 const DEFAULT_FIRST_CHECK = "";
 const DEFAULT_PAY_CYCLE   = 14;
 
-const c2  = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
-const c0  = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
-const pct = (n,d=1) => `${((n||0)*100).toFixed(d)}%`;
-const mkKey  = (y,m) => `${y}-${String(m).padStart(2,"0")}`;
-const fmtD   = d => { try { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch(e){ return d; }};
-const fmtFull= d => { try { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}); } catch(e){ return d; }};
+const c2   = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);
+const c0   = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+const pct  = (n,d=1) => `${((n||0)*100).toFixed(d)}%`;
+const mkKey   = (y,m) => `${y}-${String(m).padStart(2,"0")}`;
+const fmtD    = d => { try { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch(e){ return d; }};
+const fmtFull = d => { try { return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}); } catch(e){ return d; }};
+const autoBg  = color => color+"22";
 
-function getPayDates(firstPaycheck, cycledays, year, month) {
+const catColor = (cats,id) => cats.find(c=>c.id===id)?.color||"#888";
+const catBg    = (cats,id) => cats.find(c=>c.id===id)?.bg||"#F5F5F5";
+const catLabel = (cats,id) => cats.find(c=>c.id===id)?.label||id;
+
+function getPayDates(firstPaycheck,cycledays,year,month){
   if(!firstPaycheck) return [];
-  const start = new Date(firstPaycheck+"T12:00:00");
+  const start=new Date(firstPaycheck+"T12:00:00");
   if(isNaN(start)) return [];
-  const endOfMonth = new Date(year, month+1, 0);
-  const dates = [];
-  let cur = new Date(start);
-  while(cur <= endOfMonth) {
-    if(cur.getMonth()===month && cur.getFullYear()===year)
-      dates.push(cur.toISOString().split("T")[0]);
+  const endOfMonth=new Date(year,month+1,0);
+  const dates=[]; let cur=new Date(start);
+  while(cur<=endOfMonth){
+    if(cur.getMonth()===month&&cur.getFullYear()===year) dates.push(cur.toISOString().split("T")[0]);
     cur.setDate(cur.getDate()+cycledays);
   }
   return dates;
 }
 
-function hasIncome(jobStart, year, month) {
+function hasIncome(jobStart,year,month){
   if(!jobStart) return false;
-  const js = new Date(jobStart+"T12:00:00");
-  const first = new Date(year, month, 1);
-  return first >= new Date(js.getFullYear(), js.getMonth(), 1);
+  const js=new Date(jobStart+"T12:00:00");
+  return new Date(year,month,1)>=new Date(js.getFullYear(),js.getMonth(),1);
+}
+
+function isRecurringDue(rec,y,m){
+  if(!rec.startDate) return false;
+  const start=new Date(rec.startDate+"T12:00:00");
+  if(isNaN(start)) return false;
+  if(rec.freq==="monthly") return y>start.getFullYear()||(y===start.getFullYear()&&m>=start.getMonth());
+  return getPayDates(rec.startDate,rec.freq==="weekly"?7:14,y,m).length>0;
 }
 
 // ── MINI COMPONENTS ───────────────────────────────────────────────
@@ -60,27 +70,21 @@ function Bar({val,max,color,h=6}){
   const w=max>0?Math.min(100,(val/max)*100):0;
   return <div style={{height:h,background:"#EEECEA",borderRadius:h,overflow:"hidden"}}><div style={{height:"100%",width:`${w}%`,background:color,borderRadius:h,transition:"width 0.4s"}}/></div>;
 }
-
 function Pill({label,color,bg}){
   return <span style={{fontSize:10,padding:"2px 8px",borderRadius:20,background:bg||color+"18",color,fontWeight:600,display:"inline-block",whiteSpace:"nowrap"}}>{label}</span>;
 }
-
 function DonutChart({data,size=110}){
   const total=data.reduce((s,d)=>s+(d.v||0),0)||1;
   const r=size*0.34; const cx=size/2,cy=size/2;
   const circ=2*Math.PI*r; let off=0;
-  const slices=data.filter(d=>d.v>0).map(d=>{
-    const dash=(d.v/total)*circ;
-    const s={dash,off,color:d.color}; off+=dash; return s;
-  });
+  const slices=data.filter(d=>d.v>0).map(d=>{const dash=(d.v/total)*circ;const s={dash,off,color:d.color};off+=dash;return s;});
   return (
     <svg width={size} height={size}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEECEA" strokeWidth={r*0.5}/>
       {slices.map((s,i)=>(
         <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color}
           strokeWidth={r*0.5} strokeDasharray={`${s.dash} ${circ-s.dash}`}
-          strokeDashoffset={-s.off} transform={`rotate(-90 ${cx} ${cy})`}
-          style={{transition:"all 0.4s"}}/>
+          strokeDashoffset={-s.off} transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"all 0.4s"}}/>
       ))}
       <text x={cx} y={cy-4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#1E2130" fontFamily="DM Sans,sans-serif">{c0(data.reduce((s,d)=>s+(d.v||0),0))}</text>
       <text x={cx} y={cy+9} textAnchor="middle" fontSize="8" fill="#888780" fontFamily="DM Sans,sans-serif">total spent</text>
@@ -116,25 +120,16 @@ const S = {
   txrow:  {display:"flex",alignItems:"flex-start",gap:8,padding:"9px 0",borderBottom:"1px solid #F1EFE8"},
 };
 
-// ── MODULE-LEVEL HELPERS ──────────────────────────────────────────
-const catColor = id => CATS.find(c=>c.id===id)?.color||"#888";
-const catBg    = id => CATS.find(c=>c.id===id)?.bg||"#F5F5F5";
-const catLabel = id => CATS.find(c=>c.id===id)?.label||id;
-
 // ── TOP-LEVEL COMPONENTS ──────────────────────────────────────────
-
-function MonthBar({vm, vy, monthData, setVm}){
+function MonthBar({vm,vy,monthData,setVm}){
   const getMD=(y,m)=>monthData[mkKey(y,m)]||{income:0,bonus:0,transactions:[],rothBalance:0};
   return (
     <div style={S.mbar}>
       {MONTHS.map((m,i)=>{
-        const md=getMD(vy,i);
-        const has=(md.transactions||[]).length>0;
-        const isNow=i===CUR_M&&vy===CUR_Y;
+        const md=getMD(vy,i); const has=(md.transactions||[]).length>0; const isNow=i===CUR_M&&vy===CUR_Y;
         return (
           <button key={i} style={S.mbtn(i===vm,has)} onClick={()=>setVm(i)}>
-            <div>{m}</div>
-            <div style={{fontSize:8}}>{isNow?"●":has?"·":""}</div>
+            <div>{m}</div><div style={{fontSize:8}}>{isNow?"●":has?"·":""}</div>
           </button>
         );
       })}
@@ -142,7 +137,7 @@ function MonthBar({vm, vy, monthData, setVm}){
   );
 }
 
-function IncomeRow({incAvail, settings, editIncome, setEditIncome, tempVal, setTempVal, curMD, updMD, vy, vm, isFirstPayMonth, payDates, pendingTotal, setTab}){
+function IncomeRow({incAvail,settings,editIncome,setEditIncome,tempVal,setTempVal,curMD,updMD,vy,vm,isFirstPayMonth,payDates,pendingTotal,setTab}){
   return (
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
       {!incAvail?(
@@ -214,7 +209,7 @@ function IncomeRow({incAvail, settings, editIncome, setEditIncome, tempVal, setT
   );
 }
 
-function TxForm({txForm, setTxForm, splitPeople, setSplitPeople, addTx, setShowTxForm}){
+function TxForm({txForm,setTxForm,splitPeople,setSplitPeople,addTx,setShowTxForm,cats}){
   return (
     <div style={{...S.card,marginBottom:14,border:"1.5px solid #AFA9EC"}}>
       <div style={S.ptitle}>New transaction</div>
@@ -227,7 +222,7 @@ function TxForm({txForm, setTxForm, splitPeople, setSplitPeople, addTx, setShowT
             onKeyDown={e=>e.key==="Enter"&&!txForm.isSplit&&addTx()}/></div>
         <div><div style={S.slabel}>Category</div>
           <select style={S.sel} value={txForm.cat} onChange={e=>setTxForm({...txForm,cat:e.target.value})}>
-            {CATS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+            {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
           </select></div>
         <div><div style={S.slabel}>Amount ($)</div>
           <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={txForm.amount}
@@ -272,7 +267,8 @@ function TxForm({txForm, setTxForm, splitPeople, setSplitPeople, addTx, setShowT
   );
 }
 
-function TxList({txs, showDel=true, addReimb, delTx}){
+function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEditTxForm,startEditTx,saveTx}){
+  const cc_=(id)=>catColor(cats,id); const cb_=(id)=>catBg(cats,id); const cl_=(id)=>catLabel(cats,id);
   const grouped=[...txs].sort((a,b)=>new Date(b.date)-new Date(a.date))
     .reduce((acc,tx)=>{if(!acc[tx.date])acc[tx.date]=[];acc[tx.date].push(tx);return acc;},{});
   if(txs.length===0) return <div style={{textAlign:"center",padding:"32px 0",color:"#888780",fontSize:12}}>No transactions yet</div>;
@@ -283,16 +279,46 @@ function TxList({txs, showDel=true, addReimb, delTx}){
         <span>{c0(txs.filter(t=>!t.isReimb).reduce((s,t)=>s+t.amount,0))}</span>
       </div>
       {txs.map(tx=>{
-        const cc=catColor(tx.cat); const cb=catBg(tx.cat);
+        const cc=cc_(tx.cat); const cb=cb_(tx.cat);
+        const isEditing=editTxId===tx.id;
+        if(isEditing&&editTxForm){
+          return (
+            <div key={tx.id} style={{...S.txrow,flexDirection:"column",alignItems:"stretch",background:"#FAFAF8",borderRadius:8,padding:"12px",margin:"4px 0"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:8}}>
+                <div><div style={S.slabel}>Date</div>
+                  <input type="date" style={S.input} value={editTxForm.date} onChange={e=>setEditTxForm({...editTxForm,date:e.target.value})}/></div>
+                <div><div style={S.slabel}>Merchant</div>
+                  <input type="text" style={S.iy} value={editTxForm.merchant} autoFocus
+                    onChange={e=>setEditTxForm({...editTxForm,merchant:e.target.value})}/></div>
+                <div><div style={S.slabel}>Category</div>
+                  <select style={S.sel} value={editTxForm.cat} onChange={e=>setEditTxForm({...editTxForm,cat:e.target.value})}>
+                    {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select></div>
+                <div><div style={S.slabel}>Amount ($)</div>
+                  <input type="number" inputMode="decimal" style={S.iy} value={editTxForm.amount}
+                    onChange={e=>setEditTxForm({...editTxForm,amount:e.target.value})}/></div>
+              </div>
+              <div style={{marginBottom:8}}>
+                <input type="text" style={S.input} placeholder="Note (optional)" value={editTxForm.note}
+                  onChange={e=>setEditTxForm({...editTxForm,note:e.target.value})}/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button style={S.btnS("#534AB7")} onClick={()=>saveTx(tx.id)}>Save</button>
+                <button style={S.btn("#888780")} onClick={()=>startEditTx(null)}>Cancel</button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div key={tx.id} style={S.txrow}>
             <div style={{width:3,height:tx.isSplit?36:14,background:tx.isReimb?"#1D9E75":cc,borderRadius:2,flexShrink:0,marginTop:2}}/>
             <div style={{flex:1}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,fontWeight:500}}>{tx.merchant}</span>
+                {tx.recurringId&&<Pill label="recurring" color="#0F6E56" bg="#E1F5EE"/>}
                 {tx.isReimb&&<Pill label="reimbursement ↩" color="#1D9E75" bg="#E1F5EE"/>}
                 {tx.isSplit&&<Pill label="split" color="#1565C0" bg="#E3F2FD"/>}
-                <Pill label={catLabel(tx.cat)} color={cc} bg={cb}/>
+                <Pill label={cl_(tx.cat)} color={cc} bg={cb}/>
               </div>
               {tx.note&&<div style={{fontSize:10,color:"#888780"}}>{tx.note}</div>}
               {tx.isSplit&&tx.splitWith?.length>0&&(
@@ -301,10 +327,8 @@ function TxList({txs, showDel=true, addReimb, delTx}){
                     <div key={i} style={{display:"inline-flex",alignItems:"center",gap:6,marginRight:8,fontSize:11}}>
                       <span style={{color:p.paid?"#1D9E75":"#1565C0",fontWeight:500}}>{p.name}</span>
                       <span style={{color:"#888780"}}>owes {c2(p.owes)}</span>
-                      {p.paid
-                        ?<Pill label="paid ✓" color="#1D9E75" bg="#E1F5EE"/>
-                        :<button style={{...S.btn("#1565C0"),padding:"2px 8px",fontSize:10}} onClick={()=>addReimb(tx.id,i)}>Mark paid</button>
-                      }
+                      {p.paid?<Pill label="paid ✓" color="#1D9E75" bg="#E1F5EE"/>
+                        :<button style={{...S.btn("#1565C0"),padding:"2px 8px",fontSize:10}} onClick={()=>addReimb(tx.id,i)}>Mark paid</button>}
                     </div>
                   ))}
                 </div>
@@ -314,6 +338,7 @@ function TxList({txs, showDel=true, addReimb, delTx}){
               <div style={{fontSize:13,fontWeight:700,color:tx.isReimb?"#1D9E75":"#1E2130"}}>{tx.isReimb?"+":""}{c2(tx.amount)}</div>
               {tx.isSplit&&tx.totalBill>0&&<div style={{fontSize:10,color:"#888780"}}>of {c2(tx.totalBill)}</div>}
             </div>
+            {showDel&&<button onClick={()=>startEditTx(tx)} title="Edit" style={{background:"none",border:"none",color:"#BDBDBD",cursor:"pointer",fontSize:13,padding:"0 2px",flexShrink:0}}>✎</button>}
             {showDel&&<button onClick={()=>delTx(tx.id)} style={{background:"none",border:"none",color:"#BDBDBD",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0}}>×</button>}
           </div>
         );
@@ -324,134 +349,216 @@ function TxList({txs, showDel=true, addReimb, delTx}){
 
 // ── MAIN ─────────────────────────────────────────────────────────
 export default function App(){
-  const [tab,       setTab]       = useState("overview");
-  const [vm,        setVm]        = useState(CUR_M);
-  const [vy,        setVy]        = useState(CUR_Y);
-  const [monthData, setMonthData] = useState({});
-  const [budgets,   setBudgets]   = useState({housing:1500,groceries:400,dining:200,transport:250,entertain:150,subs:80,hustle:0,savings:500,roth:500,split:0,other:100});
-  const [goals,     setGoals]     = useState([{id:1,name:"Emergency Fund",target:15000,saved:0,color:"#1D9E75"},{id:2,name:"Vacation",target:3000,saved:0,color:"#534AB7"}]);
-  const [settings,  setSettings]  = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{}});
-  const [loaded,    setLoaded]    = useState(false);
-  const [saving,    setSaving]    = useState(false);
+  const [tab,            setTab]            = useState("overview");
+  const [vm,             setVm]             = useState(CUR_M);
+  const [vy,             setVy]             = useState(CUR_Y);
+  const [monthData,      setMonthData]      = useState({});
+  const [budgets,        setBudgets]        = useState({housing:1500,groceries:400,dining:200,transport:250,entertain:150,subs:80,hustle:0,savings:500,roth:500,split:0,other:100});
+  const [goals,          setGoals]          = useState([{id:1,name:"Emergency Fund",target:15000,saved:0,color:"#1D9E75"},{id:2,name:"Vacation",target:3000,saved:0,color:"#534AB7"}]);
+  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{}});
+  const [cats,           setCats]           = useState(DEFAULT_CATS);
+  const [recurring,      setRecurring]      = useState([]);
+  const [recurringSkips, setRecurringSkips] = useState({});
+  const [rollover,       setRollover]       = useState({});
+  const [loaded,         setLoaded]         = useState(false);
+  const [saving,         setSaving]         = useState(false);
 
   // UI state
-  const [showTxForm,   setShowTxForm]   = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showExport,   setShowExport]   = useState(false);
-  const [editIncome,   setEditIncome]   = useState(null);
-  const [tempVal,      setTempVal]      = useState("");
-  const [txForm,       setTxForm]       = useState({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});
-  const [splitPeople,  setSplitPeople]  = useState([{name:"",owes:0,paid:false}]);
+  const [showTxForm,      setShowTxForm]      = useState(false);
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [showExport,      setShowExport]      = useState(false);
+  const [editIncome,      setEditIncome]      = useState(null);
+  const [tempVal,         setTempVal]         = useState("");
+  const [txForm,          setTxForm]          = useState({date:now.toISOString().split("T")[0],merchant:"",cat:"dining",amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});
+  const [splitPeople,     setSplitPeople]     = useState([{name:"",owes:0,paid:false}]);
+  const [txSearch,        setTxSearch]        = useState("");
+  const [editTxId,        setEditTxId]        = useState(null);
+  const [editTxForm,      setEditTxForm]      = useState(null);
+  const [showQuickAdd,    setShowQuickAdd]     = useState(false);
+  const [quickForm,       setQuickForm]        = useState({merchant:"",amount:"",cat:"dining"});
+  const [showRecurForm,   setShowRecurForm]    = useState(false);
+  const [recurForm,       setRecurForm]        = useState({name:"",cat:"subs",amount:"",freq:"monthly",startDate:now.toISOString().split("T")[0]});
 
   // ── LOAD ──
   useEffect(()=>{
     async function load(){
       try {
-        const keys=["v3_md","v3_budgets","v3_goals","v3_settings"];
+        const keys=["v3_md","v3_budgets","v3_goals","v3_settings","v3_cats","v3_recurring","v3_recurringSkips","v3_rollover"];
         const res=await Promise.all(keys.map(k=>storage.get(k).catch(()=>null)));
         if(res[0]) setMonthData(JSON.parse(res[0].value));
         if(res[1]) setBudgets(JSON.parse(res[1].value));
         if(res[2]) setGoals(JSON.parse(res[2].value));
         if(res[3]) setSettings(JSON.parse(res[3].value));
+        if(res[4]) setCats(JSON.parse(res[4].value));
+        if(res[5]) setRecurring(JSON.parse(res[5].value));
+        if(res[6]) setRecurringSkips(JSON.parse(res[6].value));
+        if(res[7]) setRollover(JSON.parse(res[7].value));
       } catch(e){ console.error("Load error",e); }
       setLoaded(true);
     }
     load();
   },[]);
 
-  const persist = useCallback(async(md,bg,gl,st)=>{
+  const save = useCallback(async(key,value)=>{
     setSaving(true);
-    try {
-      await Promise.all([
-        storage.set("v3_md",      JSON.stringify(md??monthData)),
-        storage.set("v3_budgets", JSON.stringify(bg??budgets)),
-        storage.set("v3_goals",   JSON.stringify(gl??goals)),
-        storage.set("v3_settings",JSON.stringify(st??settings)),
-      ]);
-    } catch(e){ console.error("Save error",e); }
+    try { await storage.set(key,JSON.stringify(value)); } catch(e){ console.error("Save error",e); }
     setTimeout(()=>setSaving(false),600);
-  },[monthData,budgets,goals,settings]);
+  },[]);
 
   // ── DERIVED ──
-  const mkey   = mkKey(vy,vm);
-  const curMD  = monthData[mkey] || {income:0,bonus:0,transactions:[],rothBalance:0};
-  const txList = curMD.transactions || [];
-  const incAvail = hasIncome(settings.jobStart, vy, vm);
-  const isFirstPayMonth = (()=>{
-    const fp=settings.firstPaycheck||settings.jobStart;
-    if(!fp) return false;
-    const js=new Date(fp+"T12:00:00");
-    return vy===js.getFullYear() && vm===js.getMonth();
+  const mkey  = mkKey(vy,vm);
+  const getMD = (y,m) => monthData[mkKey(y,m)]||{income:0,bonus:0,transactions:[],rothBalance:0};
+  const curMD = monthData[mkey]||{income:0,bonus:0,transactions:[],rothBalance:0};
+  const txList = curMD.transactions||[];
+
+  const incAvail = hasIncome(settings.jobStart,vy,vm);
+  const isFirstPayMonth=(()=>{
+    const fp=settings.firstPaycheck||settings.jobStart; if(!fp) return false;
+    const js=new Date(fp+"T12:00:00"); return vy===js.getFullYear()&&vm===js.getMonth();
   })();
-  const payDates = getPayDates(settings.firstPaycheck, settings.payCycle||14, vy, vm);
+  const payDates=getPayDates(settings.firstPaycheck,settings.payCycle||14,vy,vm);
 
-  const getMD = (y,m) => monthData[mkKey(y,m)] || {income:0,bonus:0,transactions:[],rothBalance:0};
-  const catSpend = (cat,txs=txList) => txs.filter(t=>t.cat===cat).reduce((s,t)=>s+(t.amount||0),0);
-  const reimbReceived = txList.filter(t=>t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
-  const rawSpend = CATS.reduce((s,c)=>s+catSpend(c.id),0) - reimbReceived;
-  const totalSpent = Math.max(0, rawSpend);
-  const totalIncome = (curMD.income||0)+(curMD.bonus||0);
-  const netSaved = totalIncome - totalSpent;
-  const savRate  = totalIncome>0 ? netSaved/totalIncome : 0;
+  const catSpend=(cat,txs=txList)=>txs.filter(t=>t.cat===cat&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+  const reimbReceived=txList.filter(t=>t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+  const rawSpend=cats.reduce((s,c)=>s+catSpend(c.id),0)-reimbReceived;
+  const totalSpent=Math.max(0,rawSpend);
+  const totalIncome=(curMD.income||0)+(curMD.bonus||0);
+  const netSaved=totalIncome-totalSpent;
+  const savRate=totalIncome>0?netSaved/totalIncome:0;
 
-  const pendingSplits = txList.filter(t=>t.isSplit&&t.splitWith&&t.splitWith.some(p=>!p.paid));
-  const pendingTotal  = pendingSplits.reduce((s,t)=>s+(t.splitWith||[]).filter(p=>!p.paid).reduce((ss,p)=>ss+(p.owes||0),0),0);
+  const pendingSplits=txList.filter(t=>t.isSplit&&t.splitWith&&t.splitWith.some(p=>!p.paid));
+  const pendingTotal=pendingSplits.reduce((s,t)=>s+(t.splitWith||[]).filter(p=>!p.paid).reduce((ss,p)=>ss+(p.owes||0),0),0);
 
-  const annualCats = CATS.map(cat=>{
+  // MoM
+  const prevY=vm===0?vy-1:vy; const prevM=vm===0?11:vm-1;
+  const prevTxList=(getMD(prevY,prevM).transactions||[]);
+  const catSpendPrev=(catId)=>prevTxList.filter(t=>t.cat===catId&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+
+  // Effective budget with rollover
+  const getEffBudget=(catId,y,m)=>{
+    const base=budgets[catId]||0;
+    if(!rollover[catId]) return base;
+    const pY=m===0?y-1:y; const pM=m===0?11:m-1;
+    const pTxs=(getMD(pY,pM).transactions||[]);
+    const pSp=pTxs.filter(t=>t.cat===catId&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+    return base+Math.max(0,base-pSp);
+  };
+
+  const annualCats=cats.map(cat=>{
     let total=0;
-    for(let m=0;m<12;m++){
-      const md=getMD(vy,m);
-      total+=(md.transactions||[]).filter(t=>t.cat===cat.id&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
-    }
+    for(let m=0;m<12;m++){const md=getMD(vy,m);total+=(md.transactions||[]).filter(t=>t.cat===cat.id&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);}
     return {...cat,total};
   });
-  const annualIncome=Array.from({length:12},(_,m)=>{const md=getMD(vy,m);return (md.income||0)+(md.bonus||0);}).reduce((s,v)=>s+v,0);
+  const annualIncome=Array.from({length:12},(_,m)=>{const md=getMD(vy,m);return(md.income||0)+(md.bonus||0);}).reduce((s,v)=>s+v,0);
   const annualSpent=annualCats.reduce((s,c)=>s+c.total,0);
   const annualSaved=annualIncome-annualSpent;
   const rothYTD=annualCats.find(c=>c.id==="roth")?.total||0;
 
+  // Recurring
+  const pendingRecurring=(y,m)=>recurring.filter(rec=>{
+    if(!isRecurringDue(rec,y,m)) return false;
+    const confirmed=(getMD(y,m).transactions||[]).some(t=>t.recurringId===rec.id);
+    const skipped=!!recurringSkips[`${rec.id}_${mkKey(y,m)}`];
+    return !confirmed&&!skipped;
+  });
+  const recurringBadgeCount=pendingRecurring(CUR_Y,CUR_M).length;
+
+  // Filtered txList for search
+  const filteredTxList=txSearch.trim()
+    ?txList.filter(t=>t.merchant.toLowerCase().includes(txSearch.toLowerCase())||catLabel(cats,t.cat).toLowerCase().includes(txSearch.toLowerCase()))
+    :txList;
+
   // ── MUTATIONS ──
   const updMD=(y,m,up)=>{
-    const key=mkKey(y,m);
-    const next={...monthData,[key]:{...getMD(y,m),...up}};
-    setMonthData(next); persist(next,null,null,null);
+    const key=mkKey(y,m); const next={...monthData,[key]:{...getMD(y,m),...up}};
+    setMonthData(next); save("v3_md",next);
   };
 
   const addTx=()=>{
     if(!txForm.merchant||!txForm.amount) return;
-    const tx={
-      id:Date.now(), date:txForm.date, merchant:txForm.merchant,
-      cat:txForm.cat, amount:parseFloat(txForm.amount)||0,
-      note:txForm.note, isSplit:txForm.isSplit, isReimb:false,
-      splitWith: txForm.isSplit ? splitPeople.filter(p=>p.name).map(p=>({...p,paid:false})) : [],
-      totalBill: txForm.isSplit ? parseFloat(txForm.totalBill)||0 : 0,
-    };
-    const key=mkKey(vy,vm);
-    const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
+    const tx={id:Date.now(),date:txForm.date,merchant:txForm.merchant,cat:txForm.cat,amount:parseFloat(txForm.amount)||0,
+      note:txForm.note,isSplit:txForm.isSplit,isReimb:false,
+      splitWith:txForm.isSplit?splitPeople.filter(p=>p.name).map(p=>({...p,paid:false})):[],
+      totalBill:txForm.isSplit?parseFloat(txForm.totalBill)||0:0};
+    const key=mkKey(vy,vm); const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
     const next={...monthData,[key]:{...ex,transactions:[...(ex.transactions||[]),tx]}};
-    setMonthData(next); persist(next,null,null,null);
+    setMonthData(next); save("v3_md",next);
     setTxForm({date:now.toISOString().split("T")[0],merchant:"",cat:txForm.cat,amount:"",note:"",isSplit:false,splitWith:[],totalBill:""});
-    setSplitPeople([{name:"",owes:0,paid:false}]);
-    setShowTxForm(false);
+    setSplitPeople([{name:"",owes:0,paid:false}]); setShowTxForm(false);
+  };
+
+  const quickAddTx=()=>{
+    if(!quickForm.merchant||!quickForm.amount) return;
+    const tx={id:Date.now(),date:now.toISOString().split("T")[0],merchant:quickForm.merchant,
+      cat:quickForm.cat,amount:parseFloat(quickForm.amount)||0,note:"",isSplit:false,isReimb:false,splitWith:[],totalBill:0};
+    const key=mkKey(vy,vm); const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
+    const next={...monthData,[key]:{...ex,transactions:[...(ex.transactions||[]),tx]}};
+    setMonthData(next); save("v3_md",next);
+    setQuickForm({merchant:"",amount:"",cat:quickForm.cat}); setShowQuickAdd(false);
   };
 
   const addReimb=(txId,personIdx)=>{
-    const key=mkKey(vy,vm);
-    const ex=monthData[key]||{};
+    const key=mkKey(vy,vm); const ex=monthData[key]||{};
     const txs=(ex.transactions||[]).map(t=>{
       if(t.id!==txId) return t;
       const sw=t.splitWith.map((p,i)=>i===personIdx?{...p,paid:true,paidDate:now.toISOString().split("T")[0]}:p);
       return {...t,splitWith:sw};
     });
     const next={...monthData,[key]:{...ex,transactions:txs}};
-    setMonthData(next); persist(next,null,null,null);
+    setMonthData(next); save("v3_md",next);
   };
 
   const delTx=id=>{
-    const key=mkKey(vy,vm);
-    const ex=monthData[key]||{};
+    const key=mkKey(vy,vm); const ex=monthData[key]||{};
     const next={...monthData,[key]:{...ex,transactions:(ex.transactions||[]).filter(t=>t.id!==id)}};
-    setMonthData(next); persist(next,null,null,null);
+    setMonthData(next); save("v3_md",next);
+  };
+
+  const startEditTx=tx=>{
+    if(!tx){setEditTxId(null);setEditTxForm(null);return;}
+    setEditTxId(tx.id);
+    setEditTxForm({date:tx.date,merchant:tx.merchant,cat:tx.cat,amount:String(tx.amount),note:tx.note||""});
+  };
+
+  const saveTx=id=>{
+    if(!editTxForm) return;
+    const key=mkKey(vy,vm); const ex=monthData[key]||{};
+    const txs=(ex.transactions||[]).map(t=>t.id!==id?t:{...t,
+      date:editTxForm.date,merchant:editTxForm.merchant,cat:editTxForm.cat,
+      amount:parseFloat(editTxForm.amount)||0,note:editTxForm.note});
+    const next={...monthData,[key]:{...ex,transactions:txs}};
+    setMonthData(next); save("v3_md",next);
+    setEditTxId(null); setEditTxForm(null);
+  };
+
+  const confirmRecurring=(rec,y,m)=>{
+    const startDay=parseInt((rec.startDate||"").split("-")[2]||"1");
+    const lastDay=new Date(y,m+1,0).getDate();
+    const day=String(Math.min(startDay,lastDay)).padStart(2,"0");
+    const date=`${y}-${String(m+1).padStart(2,"0")}-${day}`;
+    const tx={id:Date.now(),date,merchant:rec.name,cat:rec.cat,amount:rec.amount,
+      note:"Recurring",recurringId:rec.id,isSplit:false,isReimb:false,splitWith:[],totalBill:0};
+    const key=mkKey(y,m); const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
+    const next={...monthData,[key]:{...ex,transactions:[...(ex.transactions||[]),tx]}};
+    setMonthData(next); save("v3_md",next);
+  };
+
+  const skipRecurring=(recId,y,m)=>{
+    const next={...recurringSkips,[`${recId}_${mkKey(y,m)}`]:true};
+    setRecurringSkips(next); save("v3_recurringSkips",next);
+  };
+
+  const addRecurring=()=>{
+    if(!recurForm.name||!recurForm.amount) return;
+    const next=[...recurring,{id:Date.now(),name:recurForm.name,cat:recurForm.cat,
+      amount:parseFloat(recurForm.amount)||0,freq:recurForm.freq,startDate:recurForm.startDate}];
+    setRecurring(next); save("v3_recurring",next);
+    setRecurForm({name:"",cat:"subs",amount:"",freq:"monthly",startDate:now.toISOString().split("T")[0]});
+    setShowRecurForm(false);
+  };
+
+  const delRecurring=id=>{
+    const next=recurring.filter(r=>r.id!==id); setRecurring(next); save("v3_recurring",next);
   };
 
   const exportData=()=>{
@@ -461,16 +568,14 @@ export default function App(){
       lines.push(`\n=== ${FULLMONTHS[parseInt(m)-1]} ${y} ===`);
       lines.push(`Income: ${c2(md.income||0)}`);
       if(md.bonus>0) lines.push(`Bonus: ${c2(md.bonus)}`);
-      (md.transactions||[]).forEach(t=>{
-        lines.push(`  ${t.date}  ${t.merchant.padEnd(30)}  ${c2(t.amount)}  [${t.cat}]${t.isSplit?" SPLIT":""}`);
-      });
+      (md.transactions||[]).forEach(t=>{lines.push(`  ${t.date}  ${t.merchant.padEnd(30)}  ${c2(t.amount)}  [${t.cat}]${t.isSplit?" SPLIT":""}`);});
     });
     return lines.join("\n");
   };
 
   const getRothTarget=(y,m)=>{
     const key=mkKey(y,m);
-    return settings.rothOverrides?.[key]!==undefined ? settings.rothOverrides[key] : (settings.rothRecurring||500);
+    return settings.rothOverrides?.[key]!==undefined?settings.rothOverrides[key]:(settings.rothRecurring||500);
   };
 
   if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><span style={{color:"#888780"}}>Loading your finances...</span></div>;
@@ -496,8 +601,10 @@ export default function App(){
       {/* NAV */}
       <div style={{background:"#FFF",borderBottom:"1px solid #E8E6E0",padding:"0 16px"}}>
         <div style={S.nav}>
-          {[["overview","Overview"],["txns","Transactions"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
-            <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>{l}</button>
+          {[["overview","Overview"],["txns","Transactions"],["recurring","Recurring"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
+            <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
+              {l}{id==="recurring"&&recurringBadgeCount>0&&<span style={{marginLeft:4,background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700,verticalAlign:"middle"}}>{recurringBadgeCount}</span>}
+            </button>
           ))}
         </div>
       </div>
@@ -511,16 +618,16 @@ export default function App(){
               <div style={S.ptitle}>Settings</div>
               <button style={S.btn("#888780")} onClick={()=>setShowSettings(false)}>Close</button>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:20}}>
               <div>
                 <div style={S.slabel}>Job start date</div>
                 <input type="date" style={S.iy} value={settings.jobStart}
-                  onChange={e=>{const next={...settings,jobStart:e.target.value};setSettings(next);persist(null,null,null,next);}}/>
+                  onChange={e=>{const next={...settings,jobStart:e.target.value};setSettings(next);save("v3_settings",next);}}/>
               </div>
               <div>
                 <div style={S.slabel}>First paycheck date</div>
                 <input type="date" style={{...S.iy,borderColor:settings.firstPaycheck?"#EF9F27":"#E24B4A"}} value={settings.firstPaycheck||""}
-                  onChange={e=>{const next={...settings,firstPaycheck:e.target.value};setSettings(next);persist(null,null,null,next);}}/>
+                  onChange={e=>{const next={...settings,firstPaycheck:e.target.value};setSettings(next);save("v3_settings",next);}}/>
                 <div style={{fontSize:10,color:settings.firstPaycheck?"#888780":"#A32D2D",marginTop:4}}>
                   {settings.firstPaycheck?"Pay dates calculated from here":"Set this when HR confirms"}
                 </div>
@@ -528,17 +635,40 @@ export default function App(){
               <div>
                 <div style={S.slabel}>Pay cycle</div>
                 <select style={S.sel} value={settings.payCycle||14}
-                  onChange={e=>{const next={...settings,payCycle:parseInt(e.target.value)};setSettings(next);persist(null,null,null,next);}}>
-                  <option value={7}>Weekly</option>
-                  <option value={14}>Biweekly</option>
-                  <option value={15}>Semi-monthly</option>
-                  <option value={30}>Monthly</option>
+                  onChange={e=>{const next={...settings,payCycle:parseInt(e.target.value)};setSettings(next);save("v3_settings",next);}}>
+                  <option value={7}>Weekly</option><option value={14}>Biweekly</option>
+                  <option value={15}>Semi-monthly</option><option value={30}>Monthly</option>
                 </select>
               </div>
               <div>
                 <div style={S.slabel}>Default Roth IRA contribution</div>
                 <input type="number" inputMode="decimal" style={S.iy} value={settings.rothRecurring||500}
-                  onChange={e=>{const next={...settings,rothRecurring:parseFloat(e.target.value)||0};setSettings(next);persist(null,null,null,next);}}/>
+                  onChange={e=>{const next={...settings,rothRecurring:parseFloat(e.target.value)||0};setSettings(next);save("v3_settings",next);}}/>
+              </div>
+            </div>
+
+            {/* CATEGORIES */}
+            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={S.ptitle}>Categories</div>
+                <button style={S.btn("#534AB7")} onClick={()=>{
+                  const newCat={id:"cat_"+Date.now(),label:"New Category",color:"#534AB7",bg:autoBg("#534AB7")};
+                  const next=[...cats,newCat]; setCats(next); save("v3_cats",next);
+                }}>+ Add</button>
+              </div>
+              <div style={{display:"grid",gap:8}}>
+                {cats.map(cat=>(
+                  <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <input type="color" value={cat.color} style={{width:28,height:28,border:"none",borderRadius:4,cursor:"pointer",padding:0,background:"none"}}
+                      onChange={e=>{const col=e.target.value;const next=cats.map(c=>c.id===cat.id?{...c,color:col,bg:autoBg(col)}:c);setCats(next);save("v3_cats",next);}}/>
+                    <input type="text" value={cat.label} style={{...S.input,flex:1}}
+                      onChange={e=>{const next=cats.map(c=>c.id===cat.id?{...c,label:e.target.value}:c);setCats(next);save("v3_cats",next);}}/>
+                    <button onClick={()=>{
+                      if(cats.length<=1) return;
+                      const next=cats.filter(c=>c.id!==cat.id); setCats(next); save("v3_cats",next);
+                    }} style={{background:"none",border:"none",color:"#BDBDBD",cursor:"pointer",fontSize:18,padding:"0 4px",flexShrink:0}}>×</button>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -559,59 +689,61 @@ export default function App(){
         {/* ══ OVERVIEW ══ */}
         {tab==="overview"&&(<>
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
-          <IncomeRow
-            incAvail={incAvail} settings={settings}
-            editIncome={editIncome} setEditIncome={setEditIncome}
-            tempVal={tempVal} setTempVal={setTempVal}
-            curMD={curMD} updMD={updMD} vy={vy} vm={vm}
-            isFirstPayMonth={isFirstPayMonth} payDates={payDates}
-            pendingTotal={pendingTotal} setTab={setTab}
-          />
+          <IncomeRow incAvail={incAvail} settings={settings} editIncome={editIncome} setEditIncome={setEditIncome}
+            tempVal={tempVal} setTempVal={setTempVal} curMD={curMD} updMD={updMD} vy={vy} vm={vm}
+            isFirstPayMonth={isFirstPayMonth} payDates={payDates} pendingTotal={pendingTotal} setTab={setTab}/>
           <div style={S.g4}>
             {[
-              {l:"Total income",  v:c0(totalIncome),   c:totalIncome>0?"#1D9E75":"#888780", s:curMD.bonus>0?`incl. ${c0(curMD.bonus)} bonus`:"this month"},
-              {l:"Total spent",   v:c0(totalSpent),    c:totalSpent>totalIncome&&totalIncome>0?"#A32D2D":"#1E2130", s:`${c0(Object.values(budgets).reduce((s,v)=>s+v,0))} budgeted`},
-              {l:"Net saved",     v:c0(netSaved),      c:netSaved>=0?"#1D9E75":"#A32D2D", s:netSaved>=0?"on track ↑":"over budget ↓"},
-              {l:"Savings rate",  v:totalIncome>0?pct(savRate):"—", c:savRate>=0.2?"#1D9E75":savRate>0?"#BA7517":"#888780", s:totalIncome>0?(savRate>=0.2?"above 20% target":"below 20%"):"no income yet"},
+              {l:"Total income", v:c0(totalIncome), c:totalIncome>0?"#1D9E75":"#888780", s:curMD.bonus>0?`incl. ${c0(curMD.bonus)} bonus`:"this month"},
+              {l:"Total spent",  v:c0(totalSpent),  c:totalSpent>totalIncome&&totalIncome>0?"#A32D2D":"#1E2130", s:`${c0(Object.values(budgets).reduce((s,v)=>s+v,0))} budgeted`},
+              {l:"Net saved",    v:c0(netSaved),    c:netSaved>=0?"#1D9E75":"#A32D2D", s:netSaved>=0?"on track ↑":"over budget ↓"},
+              {l:"Savings rate", v:totalIncome>0?pct(savRate):"—", c:savRate>=0.2?"#1D9E75":savRate>0?"#BA7517":"#888780", s:totalIncome>0?(savRate>=0.2?"above 20% target":"below 20%"):"no income yet"},
             ].map((k,i)=>(
-              <div key={i} style={S.kpi}>
-                <div style={S.klabel}>{k.l}</div>
-                <div style={S.kval(k.c)}>{k.v}</div>
-                <div style={S.ksub}>{k.s}</div>
-              </div>
+              <div key={i} style={S.kpi}><div style={S.klabel}>{k.l}</div><div style={S.kval(k.c)}>{k.v}</div><div style={S.ksub}>{k.s}</div></div>
             ))}
           </div>
           <div style={S.g2}>
             <div style={S.card}>
               <div style={S.ptitle}>Spending by category</div>
-              {CATS.filter(cat=>catSpend(cat.id)>0||budgets[cat.id]>0).map(cat=>{
-                const sp=catSpend(cat.id); const bg=budgets[cat.id]||0; const ov=sp>bg&&bg>0;
+              {cats.filter(cat=>catSpend(cat.id)>0||budgets[cat.id]>0).map(cat=>{
+                const sp=catSpend(cat.id);
+                const effBudget=getEffBudget(cat.id,vy,vm);
+                const ov=sp>effBudget&&effBudget>0;
+                const ratio=effBudget>0?sp/effBudget:0;
+                const alert=ratio>=1?"red":ratio>=0.8?"yellow":"none";
+                const prevSp=catSpendPrev(cat.id);
+                const delta=sp-prevSp;
+                const rolloverAmt=rollover[cat.id]?Math.max(0,(budgets[cat.id]||0)-prevSp):0;
                 return (
                   <div key={cat.id} style={{padding:"9px 0",borderBottom:"1px solid #F1EFE8"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <div style={{width:10,height:10,borderRadius:2,background:cat.color}}/>
                         <span style={{fontSize:12,fontWeight:500}}>{cat.label}</span>
+                        {alert==="red"&&<span style={{width:7,height:7,borderRadius:"50%",background:"#E24B4A",display:"inline-block",flexShrink:0}}/>}
+                        {alert==="yellow"&&<span style={{width:7,height:7,borderRadius:"50%",background:"#EF9F27",display:"inline-block",flexShrink:0}}/>}
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        {(prevSp>0||sp>0)&&<span style={{fontSize:10,color:delta>0?"#A32D2D":delta<0?"#1D9E75":"#888780",minWidth:40,textAlign:"right"}}>{delta>0?"+":""}{c0(delta)}</span>}
                         <span style={{fontSize:13,fontWeight:700,color:ov?"#A32D2D":"#1E2130"}}>{c0(sp)}</span>
-                        {bg>0&&<span style={{fontSize:11,color:"#888780"}}>/ {c0(bg)}</span>}
+                        {effBudget>0&&<span style={{fontSize:11,color:"#888780"}}>/ {c0(effBudget)}</span>}
                         {ov&&<Pill label="over" color="#A32D2D"/>}
                       </div>
                     </div>
-                    <Bar val={sp} max={Math.max(bg,sp,1)} color={ov?"#E24B4A":cat.color}/>
+                    <Bar val={sp} max={Math.max(effBudget,sp,1)} color={ov?"#E24B4A":alert==="yellow"?"#EF9F27":cat.color}/>
+                    {rolloverAmt>0&&<div style={{fontSize:10,color:"#1D9E75",marginTop:2}}>+{c0(rolloverAmt)} rollover</div>}
                   </div>
                 );
               })}
-              {CATS.every(c=>catSpend(c.id)===0)&&<div style={{color:"#888780",fontSize:12,textAlign:"center",padding:"20px 0"}}>No transactions yet this month</div>}
+              {cats.every(c=>catSpend(c.id)===0)&&<div style={{color:"#888780",fontSize:12,textAlign:"center",padding:"20px 0"}}>No transactions yet this month</div>}
             </div>
             <div>
               <div style={{...S.card,marginBottom:14}}>
                 <div style={S.ptitle}>Breakdown</div>
                 <div style={{display:"flex",alignItems:"center",gap:16}}>
-                  <DonutChart data={CATS.map(c=>({v:catSpend(c.id),color:c.color}))} size={110}/>
+                  <DonutChart data={cats.map(c=>({v:catSpend(c.id),color:c.color}))} size={110}/>
                   <div style={{flex:1}}>
-                    {CATS.filter(c=>catSpend(c.id)>0).map(cat=>(
+                    {cats.filter(c=>catSpend(c.id)>0).map(cat=>(
                       <div key={cat.id} style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
                           <div style={{width:8,height:8,borderRadius:"50%",background:cat.color}}/>
@@ -620,7 +752,7 @@ export default function App(){
                         <span style={{fontSize:11,fontWeight:600}}>{totalSpent>0?pct(catSpend(cat.id)/totalSpent,0):"—"}</span>
                       </div>
                     ))}
-                    {CATS.every(c=>catSpend(c.id)===0)&&<div style={{fontSize:11,color:"#888780"}}>Add transactions to see breakdown</div>}
+                    {cats.every(c=>catSpend(c.id)===0)&&<div style={{fontSize:11,color:"#888780"}}>Add transactions to see breakdown</div>}
                   </div>
                 </div>
               </div>
@@ -629,7 +761,7 @@ export default function App(){
                   <span>Recent</span>
                   <button style={{...S.btn("#534AB7"),padding:"2px 8px",fontSize:11}} onClick={()=>setTab("txns")}>All →</button>
                 </div>
-                <TxList txs={[...txList].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5)} showDel={false} addReimb={addReimb} delTx={delTx}/>
+                <TxList txs={[...txList].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5)} showDel={false} addReimb={addReimb} delTx={delTx} cats={cats} editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}/>
               </div>
             </div>
           </div>
@@ -638,42 +770,140 @@ export default function App(){
         {/* ══ TRANSACTIONS ══ */}
         {tab==="txns"&&(<>
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:15,fontWeight:700}}>{FULLMONTHS[vm]}</div>
             <button style={S.btnS("#534AB7")} onClick={()=>setShowTxForm(!showTxForm)}>{showTxForm?"✕ Cancel":"+ Add"}</button>
           </div>
-          {showTxForm&&<TxForm txForm={txForm} setTxForm={setTxForm} splitPeople={splitPeople} setSplitPeople={setSplitPeople} addTx={addTx} setShowTxForm={setShowTxForm}/>}
+          {showTxForm&&<TxForm txForm={txForm} setTxForm={setTxForm} splitPeople={splitPeople} setSplitPeople={setSplitPeople} addTx={addTx} setShowTxForm={setShowTxForm} cats={cats}/>}
           {!showTxForm&&(
             <div style={{marginBottom:10}}>
               <button style={S.btn("#1D9E75")} onClick={()=>{
                 const reimb={id:Date.now(),date:now.toISOString().split("T")[0],merchant:"Reimbursement received",cat:"other",amount:0,note:"",isReimb:true,isSplit:false,splitWith:[]};
-                const key=mkKey(vy,vm);
-                const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
+                const key=mkKey(vy,vm); const ex=monthData[key]||{income:0,bonus:0,transactions:[],rothBalance:0};
                 const next={...monthData,[key]:{...ex,transactions:[...(ex.transactions||[]),reimb]}};
-                setMonthData(next);persist(next,null,null,null);
+                setMonthData(next); save("v3_md",next);
               }}>+ Log reimbursement</button>
             </div>
           )}
+          {/* Search bar */}
+          <div style={{marginBottom:12}}>
+            <input type="text" value={txSearch} onChange={e=>setTxSearch(e.target.value)}
+              placeholder="Search merchant or category…" style={{...S.input,background:"#FFF"}}/>
+          </div>
           <div style={S.card}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
-              <div style={S.ptitle}>{txList.length} transaction{txList.length!==1?"s":""}</div>
+              <div style={S.ptitle}>{filteredTxList.length} transaction{filteredTxList.length!==1?"s":""}{txSearch?" (filtered)":""}</div>
               <span style={{fontSize:13,fontWeight:700}}>{c0(totalSpent)} net</span>
             </div>
-            <TxList txs={txList} addReimb={addReimb} delTx={delTx}/>
+            <TxList txs={filteredTxList} addReimb={addReimb} delTx={delTx} cats={cats} editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}/>
           </div>
           <div style={{...S.card,marginTop:14}}>
             <div style={S.ptitle}>Monthly budget targets</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:8}}>
-              {CATS.map(cat=>(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}}>
+              {cats.map(cat=>(
                 <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
                   <div style={{width:3,height:12,background:cat.color,borderRadius:2}}/>
                   <span style={{flex:1,fontSize:12,color:"#444441"}}>{cat.label}</span>
+                  <label style={{fontSize:10,color:rollover[cat.id]?"#1D9E75":"#BDBDBD",display:"flex",alignItems:"center",gap:3,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    <input type="checkbox" checked={!!rollover[cat.id]}
+                      onChange={e=>{const next={...rollover,[cat.id]:e.target.checked};setRollover(next);save("v3_rollover",next);}}/>
+                    rollover
+                  </label>
                   <input type="number" inputMode="decimal" value={budgets[cat.id]||0}
-                    onChange={e=>{const next={...budgets,[cat.id]:parseFloat(e.target.value)||0};setBudgets(next);persist(null,next,null,null);}}
+                    onChange={e=>{const next={...budgets,[cat.id]:parseFloat(e.target.value)||0};setBudgets(next);save("v3_budgets",next);}}
                     style={{...S.input,width:90,textAlign:"right"}}/>
                 </div>
               ))}
             </div>
+          </div>
+        </>)}
+
+        {/* ══ RECURRING ══ */}
+        {tab==="recurring"&&(<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:15,fontWeight:700}}>Recurring</div>
+            <button style={S.btnS("#534AB7")} onClick={()=>setShowRecurForm(!showRecurForm)}>{showRecurForm?"✕ Cancel":"+ Add Recurring"}</button>
+          </div>
+
+          {showRecurForm&&(
+            <div style={{...S.card,marginBottom:14,border:"1.5px solid #AFA9EC"}}>
+              <div style={S.ptitle}>New recurring payment</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:10}}>
+                <div><div style={S.slabel}>Name</div>
+                  <input type="text" style={S.iy} placeholder="e.g. Rent" value={recurForm.name}
+                    onChange={e=>setRecurForm({...recurForm,name:e.target.value})}/></div>
+                <div><div style={S.slabel}>Category</div>
+                  <select style={S.sel} value={recurForm.cat} onChange={e=>setRecurForm({...recurForm,cat:e.target.value})}>
+                    {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select></div>
+                <div><div style={S.slabel}>Amount ($)</div>
+                  <input type="number" inputMode="decimal" style={S.iy} placeholder="0.00" value={recurForm.amount}
+                    onChange={e=>setRecurForm({...recurForm,amount:e.target.value})}/></div>
+                <div><div style={S.slabel}>Frequency</div>
+                  <select style={S.sel} value={recurForm.freq} onChange={e=>setRecurForm({...recurForm,freq:e.target.value})}>
+                    <option value="monthly">Monthly</option>
+                    <option value="biweekly">Biweekly</option>
+                    <option value="weekly">Weekly</option>
+                  </select></div>
+                <div><div style={S.slabel}>Start date</div>
+                  <input type="date" style={S.input} value={recurForm.startDate}
+                    onChange={e=>setRecurForm({...recurForm,startDate:e.target.value})}/></div>
+              </div>
+              <button style={S.btnS("#534AB7")} onClick={addRecurring}>Save recurring →</button>
+            </div>
+          )}
+
+          {/* Pending this month */}
+          {(()=>{const pending=pendingRecurring(vy,vm);return pending.length>0&&(
+            <div style={{...S.card,marginBottom:14,border:"1.5px solid #EF9F2744"}}>
+              <div style={{...S.ptitle,color:"#BA7517"}}>Pending — {FULLMONTHS[vm]} ({pending.length})</div>
+              {pending.map(rec=>{
+                const cc=catColor(cats,rec.cat); const cb=catBg(cats,rec.cat);
+                return (
+                  <div key={rec.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #F1EFE8"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600}}>{rec.name}</div>
+                      <div style={{display:"flex",gap:6,marginTop:3}}>
+                        <Pill label={catLabel(cats,rec.cat)} color={cc} bg={cb}/>
+                        <Pill label={rec.freq} color="#888780" bg="#F1EFE8"/>
+                      </div>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#1E2130",marginRight:8}}>{c2(rec.amount)}</div>
+                    <button style={S.btnS("#1D9E75")} onClick={()=>confirmRecurring(rec,vy,vm)}>Confirm</button>
+                    <button style={S.btn("#888780")} onClick={()=>skipRecurring(rec.id,vy,vm)}>Skip</button>
+                  </div>
+                );
+              })}
+            </div>
+          );})()}
+
+          {/* All recurring definitions */}
+          <div style={S.card}>
+            <div style={S.ptitle}>All recurring ({recurring.length})</div>
+            {recurring.length===0&&<div style={{color:"#888780",fontSize:12,textAlign:"center",padding:"24px 0"}}>No recurring payments set up yet.</div>}
+            {recurring.map(rec=>{
+              const cc=catColor(cats,rec.cat); const cb=catBg(cats,rec.cat);
+              const confirmedThisMonth=(getMD(vy,vm).transactions||[]).some(t=>t.recurringId===rec.id);
+              const skippedThisMonth=!!recurringSkips[`${rec.id}_${mkKey(vy,vm)}`];
+              return (
+                <div key={rec.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #F1EFE8"}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:13,fontWeight:600}}>{rec.name}</span>
+                      {confirmedThisMonth&&<Pill label="confirmed ✓" color="#1D9E75" bg="#E1F5EE"/>}
+                      {skippedThisMonth&&<Pill label="skipped" color="#888780" bg="#F1EFE8"/>}
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:4}}>
+                      <Pill label={catLabel(cats,rec.cat)} color={cc} bg={cb}/>
+                      <Pill label={rec.freq} color="#888780" bg="#F1EFE8"/>
+                      <span style={{fontSize:10,color:"#888780"}}>from {fmtD(rec.startDate)}</span>
+                    </div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:700}}>{c2(rec.amount)}</div>
+                  <button onClick={()=>delRecurring(rec.id)} style={{background:"none",border:"none",color:"#BDBDBD",cursor:"pointer",fontSize:18,padding:"0 4px"}}>×</button>
+                </div>
+              );
+            })}
           </div>
         </>)}
 
@@ -682,33 +912,19 @@ export default function App(){
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
           <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Splits</div>
           <div style={S.g3}>
-            <div style={S.kpi}>
-              <div style={S.klabel}>Pending</div>
-              <div style={S.kval("#1565C0")}>{c0(pendingTotal)}</div>
-              <div style={S.ksub}>friends still owe you</div>
-            </div>
-            <div style={S.kpi}>
-              <div style={S.klabel}>Split txns</div>
-              <div style={S.kval("#1E2130")}>{txList.filter(t=>t.isSplit).length}</div>
-              <div style={S.ksub}>this month</div>
-            </div>
-            <div style={S.kpi}>
-              <div style={S.klabel}>Reimbursed</div>
-              <div style={S.kval("#1D9E75")}>{c0(txList.filter(t=>t.isSplit).reduce((s,t)=>(t.splitWith||[]).filter(p=>p.paid).reduce((ss,p)=>ss+(p.owes||0),0)+s,0))}</div>
-              <div style={S.ksub}>received back</div>
-            </div>
+            <div style={S.kpi}><div style={S.klabel}>Pending</div><div style={S.kval("#1565C0")}>{c0(pendingTotal)}</div><div style={S.ksub}>friends still owe you</div></div>
+            <div style={S.kpi}><div style={S.klabel}>Split txns</div><div style={S.kval("#1E2130")}>{txList.filter(t=>t.isSplit).length}</div><div style={S.ksub}>this month</div></div>
+            <div style={S.kpi}><div style={S.klabel}>Reimbursed</div><div style={S.kval("#1D9E75")}>{c0(txList.filter(t=>t.isSplit).reduce((s,t)=>(t.splitWith||[]).filter(p=>p.paid).reduce((ss,p)=>ss+(p.owes||0),0)+s,0))}</div><div style={S.ksub}>received back</div></div>
           </div>
           <div style={S.card}>
             <div style={S.ptitle}>Split expenses — {FULLMONTHS[vm]}</div>
-            {txList.filter(t=>t.isSplit).length===0&&(
-              <div style={{color:"#888780",fontSize:12,textAlign:"center",padding:"24px 0"}}>No split expenses this month.</div>
-            )}
+            {txList.filter(t=>t.isSplit).length===0&&<div style={{color:"#888780",fontSize:12,textAlign:"center",padding:"24px 0"}}>No split expenses this month.</div>}
             {txList.filter(t=>t.isSplit).map(tx=>(
               <div key={tx.id} style={{...S.card,marginBottom:10,border:"1px solid #E3F2FD"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                   <div>
                     <div style={{fontSize:13,fontWeight:700}}>{tx.merchant}</div>
-                    <div style={{fontSize:11,color:"#888780"}}>{fmtD(tx.date)} · {catLabel(tx.cat)}</div>
+                    <div style={{fontSize:11,color:"#888780"}}>{fmtD(tx.date)} · {catLabel(cats,tx.cat)}</div>
                   </div>
                   <div style={{textAlign:"right"}}>
                     <div style={{fontSize:14,fontWeight:700,color:"#1565C0"}}>{c2(tx.amount)} <span style={{fontSize:11,color:"#888780",fontWeight:400}}>your share</span></div>
@@ -721,10 +937,8 @@ export default function App(){
                       <span style={{fontSize:12,fontWeight:600}}>{p.name}</span>
                       <span style={{fontSize:12,color:"#888780",marginLeft:8}}>owes {c2(p.owes)}</span>
                     </div>
-                    {p.paid
-                      ?<Pill label={`Paid ✓ ${p.paidDate?fmtD(p.paidDate):""}`} color="#1D9E75" bg="#E1F5EE"/>
-                      :<button style={S.btnS("#1565C0")} onClick={()=>addReimb(tx.id,i)}>Mark paid</button>
-                    }
+                    {p.paid?<Pill label={`Paid ✓ ${p.paidDate?fmtD(p.paidDate):""}`} color="#1D9E75" bg="#E1F5EE"/>
+                      :<button style={S.btnS("#1565C0")} onClick={()=>addReimb(tx.id,i)}>Mark paid</button>}
                   </div>
                 ))}
               </div>
@@ -736,15 +950,12 @@ export default function App(){
         {tab==="annual"&&(<>
           <div style={S.g4}>
             {[
-              {l:"Annual income", v:c0(annualIncome), c:"#1D9E75"},
-              {l:"Annual spent",  v:c0(annualSpent),  c:"#1E2130"},
-              {l:"Annual saved",  v:c0(annualSaved),  c:annualSaved>=0?"#185FA5":"#A32D2D"},
+              {l:"Annual income",    v:c0(annualIncome), c:"#1D9E75"},
+              {l:"Annual spent",     v:c0(annualSpent),  c:"#1E2130"},
+              {l:"Annual saved",     v:c0(annualSaved),  c:annualSaved>=0?"#185FA5":"#A32D2D"},
               {l:"Avg savings rate", v:annualIncome>0?pct(annualSaved/annualIncome):"—", c:"#BA7517"},
             ].map((k,i)=>(
-              <div key={i} style={S.kpi}>
-                <div style={S.klabel}>{k.l}</div>
-                <div style={S.kval(k.c)}>{k.v}</div>
-              </div>
+              <div key={i} style={S.kpi}><div style={S.klabel}>{k.l}</div><div style={S.kval(k.c)}>{k.v}</div></div>
             ))}
           </div>
           <div style={S.g2}>
@@ -754,13 +965,10 @@ export default function App(){
                 {["","Income","Spent","Saved"].map((h,i)=><div key={i} style={{fontSize:10,color:"#888780",textAlign:i>0?"right":"left"}}>{h}</div>)}
               </div>
               {MONTHS.map((m,i)=>{
-                const md=getMD(vy,i);
-                const inc=(md.income||0)+(md.bonus||0);
+                const md=getMD(vy,i); const inc=(md.income||0)+(md.bonus||0);
                 const reimbs=(md.transactions||[]).filter(t=>t.isReimb).reduce((s,t)=>s+t.amount,0);
                 const sp=Math.max(0,(md.transactions||[]).filter(t=>!t.isReimb).reduce((s,t)=>s+(t.amount||0),0)-reimbs);
-                const sv=inc-sp;
-                const has=(md.transactions||[]).length>0;
-                const isNow=i===CUR_M&&vy===CUR_Y;
+                const sv=inc-sp; const has=(md.transactions||[]).length>0; const isNow=i===CUR_M&&vy===CUR_Y;
                 return (
                   <div key={i} onClick={()=>{setVm(i);setTab("overview");}}
                     style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 1fr",gap:6,padding:"6px 4px",borderBottom:"1px solid #F1EFE8",cursor:"pointer",background:isNow?"#F8F7FF":"transparent",borderRadius:4}}>
@@ -802,16 +1010,15 @@ export default function App(){
         {tab==="goals"&&(<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div style={{fontSize:15,fontWeight:700}}>Savings Goals</div>
-            <button style={S.btnS("#1D9E75")} onClick={()=>{const next=[...goals,{id:Date.now(),name:"New Goal",target:5000,saved:0,color:"#185FA5"}];setGoals(next);persist(null,null,next,null);}}>+ Add Goal</button>
+            <button style={S.btnS("#1D9E75")} onClick={()=>{const next=[...goals,{id:Date.now(),name:"New Goal",target:5000,saved:0,color:"#185FA5"}];setGoals(next);save("v3_goals",next);}}>+ Add Goal</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}>
             {goals.map(goal=>{
-              const p=goal.target>0?Math.min(1,goal.saved/goal.target):0;
-              const done=p>=1;
+              const p=goal.target>0?Math.min(1,goal.saved/goal.target):0; const done=p>=1;
               return (
                 <div key={goal.id} style={{...S.card,border:`1.5px solid ${done?"#5DCAA5":"#E8E6E0"}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <input value={goal.name} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,name:e.target.value}:g);setGoals(next);persist(null,null,next,null);}}
+                    <input value={goal.name} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,name:e.target.value}:g);setGoals(next);save("v3_goals",next);}}
                       style={{background:"transparent",border:"none",outline:"none",fontSize:14,fontWeight:700,color:"#1E2130",fontFamily:"inherit",flex:1}}/>
                     {done&&<Pill label="Complete ✓" color="#1D9E75" bg="#E1F5EE"/>}
                   </div>
@@ -823,13 +1030,13 @@ export default function App(){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                     <div><div style={S.slabel}>Target</div>
-                      <input type="number" inputMode="decimal" value={goal.target} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,target:parseFloat(e.target.value)||0}:g);setGoals(next);persist(null,null,next,null);}} style={S.input}/></div>
+                      <input type="number" inputMode="decimal" value={goal.target} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,target:parseFloat(e.target.value)||0}:g);setGoals(next);save("v3_goals",next);}} style={S.input}/></div>
                     <div><div style={S.slabel}>Saved so far</div>
-                      <input type="number" inputMode="decimal" value={goal.saved} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,saved:parseFloat(e.target.value)||0}:g);setGoals(next);persist(null,null,next,null);}} style={S.iy}/></div>
+                      <input type="number" inputMode="decimal" value={goal.saved} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,saved:parseFloat(e.target.value)||0}:g);setGoals(next);save("v3_goals",next);}} style={S.iy}/></div>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:12,fontWeight:700,color:goal.color}}>{c2(goal.saved)} / {c2(goal.target)}</span>
-                    <button onClick={()=>{const next=goals.filter(g=>g.id!==goal.id);setGoals(next);persist(null,null,next,null);}} style={{background:"none",border:"none",color:"#BDBDBD",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>remove</button>
+                    <button onClick={()=>{const next=goals.filter(g=>g.id!==goal.id);setGoals(next);save("v3_goals",next);}} style={{background:"none",border:"none",color:"#BDBDBD",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>remove</button>
                   </div>
                 </div>
               );
@@ -844,20 +1051,11 @@ export default function App(){
           <div style={{fontSize:12,color:"#888780",marginBottom:16}}>Auto-tracked from transactions · Add via Transactions tab with category "Roth IRA"</div>
           <div style={S.g3}>
             <div style={{...S.kpi,border:"1.5px solid #EF9F2744"}}>
-              <div style={S.klabel}>Contributions YTD</div>
-              <div style={S.kval("#854F0B")}>{c0(rothYTD)}</div>
+              <div style={S.klabel}>Contributions YTD</div><div style={S.kval("#854F0B")}>{c0(rothYTD)}</div>
               <div style={S.ksub}>{c0(7000-rothYTD)} of $7,000 remaining</div>
             </div>
-            <div style={S.kpi}>
-              <div style={S.klabel}>This month</div>
-              <div style={S.kval("#1E2130")}>{c0(catSpend("roth"))}</div>
-              <div style={S.ksub}>target: {c0(getRothTarget(vy,vm))}</div>
-            </div>
-            <div style={S.kpi}>
-              <div style={S.klabel}>Monthly default</div>
-              <div style={S.kval("#1D9E75")}>{c0(settings.rothRecurring||500)}</div>
-              <div style={S.ksub}>change in Settings ⚙</div>
-            </div>
+            <div style={S.kpi}><div style={S.klabel}>This month</div><div style={S.kval("#1E2130")}>{c0(catSpend("roth"))}</div><div style={S.ksub}>target: {c0(getRothTarget(vy,vm))}</div></div>
+            <div style={S.kpi}><div style={S.klabel}>Monthly default</div><div style={S.kval("#1D9E75")}>{c0(settings.rothRecurring||500)}</div><div style={S.ksub}>change in Settings ⚙</div></div>
           </div>
           <div style={{...S.card,marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
@@ -873,8 +1071,7 @@ export default function App(){
               {MONTHS.map((m,i)=>{
                 const md=getMD(vy,i);
                 const contrib=(md.transactions||[]).filter(t=>t.cat==="roth"&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
-                const target=getRothTarget(vy,i);
-                const isNow=i===CUR_M&&vy===CUR_Y;
+                const target=getRothTarget(vy,i); const isNow=i===CUR_M&&vy===CUR_Y;
                 return (
                   <div key={i} style={{padding:"8px 0",borderBottom:"1px solid #F1EFE8",background:isNow?"#FFFBEB":"transparent",borderRadius:isNow?4:0,paddingLeft:isNow?6:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:contrib>0?5:0}}>
@@ -901,8 +1098,7 @@ export default function App(){
               <div style={S.ptitle}>Monthly overrides</div>
               <div style={{fontSize:12,color:"#888780",marginBottom:10}}>Override the default {c0(settings.rothRecurring||500)}/mo for a specific month</div>
               {MONTHS.map((m,i)=>{
-                const key=mkKey(vy,i);
-                const ov=settings.rothOverrides?.[key];
+                const key=mkKey(vy,i); const ov=settings.rothOverrides?.[key];
                 return (
                   <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
                     <span style={{width:32,fontSize:12,color:"#444441",fontWeight:500}}>{m}</span>
@@ -913,7 +1109,7 @@ export default function App(){
                         const overrides={...(settings.rothOverrides||{})};
                         if(v===undefined) delete overrides[key]; else overrides[key]=v;
                         const next={...settings,rothOverrides:overrides};
-                        setSettings(next); persist(null,null,null,next);
+                        setSettings(next); save("v3_settings",next);
                       }}
                       style={{...S.input,width:120,textAlign:"right",borderColor:ov!==undefined?"#EF9F27":"#E8E6E0"}}/>
                     {ov!==undefined&&<Pill label="override" color="#BA7517" bg="#FAEEDA"/>}
@@ -925,6 +1121,32 @@ export default function App(){
         </>)}
 
       </div>
+
+      {/* ── QUICK ADD FLOATING BUTTON ── */}
+      {showQuickAdd&&(
+        <div style={{position:"fixed",bottom:76,right:16,zIndex:100,background:"#FFF",border:"1px solid #E8E6E0",borderRadius:12,padding:16,boxShadow:"0 4px 24px rgba(0,0,0,0.14)",width:260}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:"#1E2130"}}>Quick Add</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <input type="text" style={S.iy} placeholder="Merchant" value={quickForm.merchant}
+              onChange={e=>setQuickForm({...quickForm,merchant:e.target.value})}
+              onKeyDown={e=>e.key==="Enter"&&quickAddTx()} autoFocus/>
+            <input type="number" inputMode="decimal" style={S.iy} placeholder="Amount ($)" value={quickForm.amount}
+              onChange={e=>setQuickForm({...quickForm,amount:e.target.value})}
+              onKeyDown={e=>e.key==="Enter"&&quickAddTx()}/>
+            <select style={S.sel} value={quickForm.cat} onChange={e=>setQuickForm({...quickForm,cat:e.target.value})}>
+              {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <button style={{...S.btnS("#534AB7"),flex:1}} onClick={quickAddTx}>Add →</button>
+            <button style={S.btn("#888780")} onClick={()=>setShowQuickAdd(false)}>✕</button>
+          </div>
+        </div>
+      )}
+      <button onClick={()=>setShowQuickAdd(!showQuickAdd)}
+        style={{position:"fixed",bottom:16,right:16,zIndex:100,width:52,height:52,borderRadius:"50%",background:"#534AB7",color:"#FFF",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 2px 12px rgba(83,74,183,0.45)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>
+        {showQuickAdd?"✕":"+"}
+      </button>
     </div>
   );
 }
