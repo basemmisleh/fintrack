@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { usePlaidLink } from "react-plaid-link";
 import { storage } from "./storage.js";
+
+const FUNC_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 const DEFAULT_CATS = [
   { id:"housing",   label:"Housing",        color:"#185FA5", bg:"#E6F1FB" },
@@ -392,6 +395,48 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
   ));
 }
 
+// ── PLAID CONNECT BUTTON ──────────────────────────────────────────
+function PlaidConnectButton({ onConnected }) {
+  const [linkToken, setLinkToken] = useState("");
+  const [loading,   setLoading]   = useState(false);
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: async (public_token, metadata) => {
+      try {
+        const res = await fetch(`${FUNC_BASE}/plaid-exchange-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ public_token, institution: metadata.institution }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        onConnected(data);
+      } catch(e) { console.error("Exchange error:", e); }
+      finally { setLoading(false); setLinkToken(""); }
+    },
+    onExit: () => { setLoading(false); setLinkToken(""); },
+  });
+
+  useEffect(() => { if (linkToken && ready) open(); }, [linkToken, ready, open]);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const res  = await fetch(`${FUNC_BASE}/plaid-link-token`, { method: "POST" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setLinkToken(data.link_token);
+    } catch(e) { console.error("Link token error:", e); setLoading(false); }
+  };
+
+  return (
+    <button style={S.btnS("#6366F1")} onClick={handleConnect} disabled={loading}>
+      {loading ? "Opening…" : "+ Connect Bank"}
+    </button>
+  );
+}
+
 // ── MAIN ─────────────────────────────────────────────────────────
 export default function App(){
   const [tab,            setTab]            = useState("overview");
@@ -424,6 +469,13 @@ export default function App(){
   const [showRecurForm,   setShowRecurForm]    = useState(false);
   const [recurForm,       setRecurForm]        = useState({name:"",cat:"subs",amount:"",freq:"monthly",startDate:now.toISOString().split("T")[0]});
 
+  // Plaid state
+  const [connections,      setConnections]      = useState([]);
+  const [syncedTxs,        setSyncedTxs]        = useState([]);
+  const [importSelections, setImportSelections] = useState({});
+  const [importSearch,     setImportSearch]     = useState("");
+  const [syncing,          setSyncing]          = useState(false);
+
   // ── LOAD ──
   useEffect(()=>{
     async function load(){
@@ -442,6 +494,7 @@ export default function App(){
       setLoaded(true);
     }
     load();
+    loadConnections();
   },[]);
 
   const save = useCallback(async(key,value)=>{
@@ -614,6 +667,67 @@ export default function App(){
     const next=recurring.filter(r=>r.id!==id); setRecurring(next); save("v3_recurring",next);
   };
 
+  // ── PLAID ──
+  const loadConnections = useCallback(async () => {
+    try {
+      const res  = await fetch(`${FUNC_BASE}/plaid-get-connections`, { method: "POST" });
+      const data = await res.json();
+      if (data.connections) setConnections(data.connections);
+    } catch(e) { console.error("Load connections error:", e); }
+  }, []);
+
+  const syncTransactions = async () => {
+    setSyncing(true);
+    try {
+      const res  = await fetch(`${FUNC_BASE}/plaid-sync-transactions`, { method: "POST" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      // Filter out already-imported plaid_ids
+      const imported = new Set();
+      Object.values(monthData).forEach(md => (md.transactions||[]).forEach(t => { if (t.plaid_id) imported.add(t.plaid_id); }));
+      const fresh = (data.transactions||[]).filter(t => !imported.has(t.plaid_id));
+
+      setSyncedTxs(fresh);
+      const sel = {};
+      fresh.forEach(t => { sel[t.plaid_id] = true; });
+      setImportSelections(sel);
+      loadConnections();
+    } catch(e) { console.error("Sync error:", e); }
+    finally { setSyncing(false); }
+  };
+
+  const importPlaidTxs = () => {
+    const toImport = syncedTxs.filter(t => importSelections[t.plaid_id]);
+    if (!toImport.length) return;
+
+    const byMonth = {};
+    toImport.forEach(t => {
+      const [y, m] = t.date.split("-");
+      const key = mkKey(parseInt(y), parseInt(m) - 1);
+      if (!byMonth[key]) byMonth[key] = [];
+      byMonth[key].push(t);
+    });
+
+    let next = { ...monthData };
+    Object.entries(byMonth).forEach(([key, txs]) => {
+      const ex = next[key] || { income:0, bonus:0, transactions:[], rothBalance:0 };
+      const newTxs = txs.map((t, i) => ({
+        id: Date.now() + i, date: t.date, merchant: t.merchant,
+        cat: t.category, amount: t.amount,
+        note: `${t.institution} · ${t.account}`,
+        isSplit: false, isReimb: false, splitWith: [], totalBill: 0,
+        plaid_id: t.plaid_id,
+      }));
+      next[key] = { ...ex, transactions: [...ex.transactions, ...newTxs] };
+    });
+
+    setMonthData(next); save("v3_md", next);
+    const ids = new Set(toImport.map(t => t.plaid_id));
+    setSyncedTxs(prev => prev.filter(t => !ids.has(t.plaid_id)));
+    setImportSelections({});
+  };
+
   const exportData=()=>{
     const lines=["FINTRACK EXPORT — "+new Date().toLocaleDateString(),""];
     Object.entries(monthData).forEach(([key,md])=>{
@@ -654,7 +768,7 @@ export default function App(){
       {/* NAV */}
       <div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
         <div style={S.nav}>
-          {[["overview","Overview"],["txns","Transactions"],["recurring","Recurring"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
+          {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
             <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
               {l}{id==="recurring"&&recurringBadgeCount>0&&<span style={{marginLeft:4,background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700,verticalAlign:"middle"}}>{recurringBadgeCount}</span>}
             </button>
@@ -874,6 +988,105 @@ export default function App(){
               ))}
             </div>
           </div>
+        </>)}
+
+        {/* ══ ACCOUNTS (PLAID) ══ */}
+        {tab==="accounts"&&(<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:700}}>Connected Accounts</div>
+              <div style={{fontSize:11,color:"#64748B",marginTop:2}}>Sandbox mode — test data only. Switch to production when ready.</div>
+            </div>
+            <PlaidConnectButton onConnected={()=>loadConnections()}/>
+          </div>
+
+          {/* Bank cards */}
+          {connections.length===0?(
+            <div style={{...S.card,textAlign:"center",padding:"40px 20px",marginBottom:16}}>
+              <div style={{fontSize:36,marginBottom:12}}>🏦</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#0F172A",marginBottom:6}}>No accounts connected yet</div>
+              <div style={{fontSize:12,color:"#64748B",marginBottom:16}}>Connect your Chase or Amex account to automatically import transactions.</div>
+              <PlaidConnectButton onConnected={()=>loadConnections()}/>
+            </div>
+          ):(
+            <div style={{...S.card,marginBottom:16}}>
+              <div style={S.ptitle}>Your banks</div>
+              {connections.map(conn=>(
+                <div key={conn.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 0",borderBottom:"1px solid #F1F5F9"}}>
+                  <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🏦</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700}}>{conn.institution_name}</div>
+                    <div style={{fontSize:11,color:"#64748B"}}>
+                      {(conn.accounts||[]).map((a,i)=>(
+                        <span key={i}>{a.name}{a.mask?` ···${a.mask}`:""}{i<conn.accounts.length-1?" · ":""}</span>
+                      ))}
+                    </div>
+                    <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
+                      Last synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
+                    </div>
+                  </div>
+                  <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
+                </div>
+              ))}
+              <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center"}}>
+                <button style={S.btnS("#6366F1")} onClick={syncTransactions} disabled={syncing}>
+                  {syncing?"↻ Syncing…":"↻ Sync Now"}
+                </button>
+                {syncing&&<div style={{fontSize:11,color:"#6366F1"}}>Fetching transactions from Plaid…</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Import preview */}
+          {syncedTxs.length>0&&(<>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700}}>{syncedTxs.length} new transaction{syncedTxs.length!==1?"s":""} ready to import</div>
+                <div style={{fontSize:11,color:"#64748B"}}>{Object.values(importSelections).filter(Boolean).length} selected</div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button style={S.btn("#64748B")} onClick={()=>{const s={};syncedTxs.forEach(t=>{s[t.plaid_id]=true;});setImportSelections(s);}}>All</button>
+                <button style={S.btn("#64748B")} onClick={()=>setImportSelections({})}>None</button>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <input type="text" style={{...S.input,background:"#FFF"}} placeholder="Search transactions…"
+                value={importSearch} onChange={e=>setImportSearch(e.target.value)}/>
+            </div>
+            <div style={S.card}>
+              {syncedTxs
+                .filter(t=>!importSearch||t.merchant.toLowerCase().includes(importSearch.toLowerCase())||catLabel(cats,t.category).toLowerCase().includes(importSearch.toLowerCase()))
+                .slice(0,150)
+                .map(t=>{
+                  const cc=catColor(cats,t.category); const cb=catBg(cats,t.category);
+                  return (
+                    <div key={t.plaid_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #F1F5F9"}}>
+                      <input type="checkbox" style={{flexShrink:0,width:16,height:16,cursor:"pointer"}}
+                        checked={!!importSelections[t.plaid_id]}
+                        onChange={e=>setImportSelections(prev=>({...prev,[t.plaid_id]:e.target.checked}))}/>
+                      <div style={{width:34,height:34,borderRadius:8,background:cc+"1a",border:`1.5px solid ${cc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:13,fontWeight:700,color:cc}}>{(t.merchant[0]||"?").toUpperCase()}</span>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant}</div>
+                        <div style={{fontSize:10,color:"#64748B"}}>{fmtD(t.date)} · {t.institution}</div>
+                      </div>
+                      <Pill label={catLabel(cats,t.category)} color={cc} bg={cb}/>
+                      <div style={{fontSize:13,fontWeight:700,flexShrink:0,minWidth:60,textAlign:"right"}}>{c2(t.amount)}</div>
+                    </div>
+                  );
+                })
+              }
+              {syncedTxs.length>150&&<div style={{fontSize:11,color:"#64748B",textAlign:"center",padding:"8px 0"}}>Showing 150 of {syncedTxs.length}. Search to filter.</div>}
+            </div>
+            <div style={{marginTop:14,display:"flex",gap:10,alignItems:"center"}}>
+              <button style={S.btnS("#10B981")} onClick={importPlaidTxs}
+                disabled={!Object.values(importSelections).some(Boolean)}>
+                Import {Object.values(importSelections).filter(Boolean).length} transactions →
+              </button>
+              <button style={S.btn("#64748B")} onClick={()=>{setSyncedTxs([]);setImportSelections({});}}>Dismiss</button>
+            </div>
+          </>)}
         </>)}
 
         {/* ══ RECURRING ══ */}
