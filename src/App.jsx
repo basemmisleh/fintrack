@@ -396,13 +396,21 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
 }
 
 // ── PLAID CONNECT BUTTON ──────────────────────────────────────────
+const PLAID_REDIRECT_URI = "https://fintrack-five-nu.vercel.app";
+
 function PlaidConnectButton({ onConnected }) {
-  const [linkToken, setLinkToken] = useState("");
-  const [loading,   setLoading]   = useState(false);
+  const isOAuthRedirect = new URLSearchParams(window.location.search).has("oauth_state_id");
+  const [linkToken, setLinkToken] = useState(() => isOAuthRedirect ? (localStorage.getItem("plaid_link_token") || "") : "");
+  const [loading,   setLoading]   = useState(isOAuthRedirect);
+
+  const receivedRedirectUri = isOAuthRedirect ? window.location.href : undefined;
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
+    receivedRedirectUri,
     onSuccess: async (public_token, metadata) => {
+      localStorage.removeItem("plaid_link_token");
+      window.history.replaceState({}, "", window.location.pathname);
       try {
         const res = await fetch(`${FUNC_BASE}/plaid-exchange-token`, {
           method: "POST",
@@ -415,7 +423,12 @@ function PlaidConnectButton({ onConnected }) {
       } catch(e) { console.error("Exchange error:", e); }
       finally { setLoading(false); setLinkToken(""); }
     },
-    onExit: () => { setLoading(false); setLinkToken(""); },
+    onExit: () => {
+      localStorage.removeItem("plaid_link_token");
+      window.history.replaceState({}, "", window.location.pathname);
+      setLoading(false);
+      setLinkToken("");
+    },
   });
 
   useEffect(() => { if (linkToken && ready) open(); }, [linkToken, ready, open]);
@@ -426,13 +439,14 @@ function PlaidConnectButton({ onConnected }) {
       const res  = await fetch(`${FUNC_BASE}/plaid-link-token`, { method: "POST" });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+      localStorage.setItem("plaid_link_token", data.link_token);
       setLinkToken(data.link_token);
     } catch(e) { console.error("Link token error:", e); setLoading(false); }
   };
 
   return (
-    <button style={S.btnS("#6366F1")} onClick={handleConnect} disabled={loading}>
-      {loading ? "Opening…" : "+ Connect Bank"}
+    <button style={S.btnS("#6366F1")} onClick={handleConnect} disabled={loading || isOAuthRedirect}>
+      {loading || isOAuthRedirect ? "Opening…" : "+ Connect Bank"}
     </button>
   );
 }
