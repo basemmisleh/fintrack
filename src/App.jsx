@@ -2116,11 +2116,15 @@ export default function App(){
 
         {/* ══ NET WORTH ══ */}
         {tab==="networth"&&(()=>{
-          const assetsTotal=manualAssets.reduce((s,a)=>s+(a.value||0),0);
           const manualLiabilities=manualAssets.filter(a=>a.isLiability);
           const manualAssetsOnly=manualAssets.filter(a=>!a.isLiability);
-          const assetsSum=manualAssetsOnly.reduce((s,a)=>s+(a.value||0),0);
-          const liabilitiesTotal=manualLiabilities.reduce((s,a)=>s+(a.value||0),0);
+          // Plaid balances — read-only, display only
+          const plaidDeposit=plaidBalances.filter(a=>a.type==="depository"||a.type==="investment");
+          const plaidCredit=plaidBalances.filter(a=>a.type==="credit"||a.type==="loan");
+          const assetsPlaid=plaidDeposit.reduce((s,a)=>s+(a.balance||0),0);
+          const liabPlaid=plaidCredit.reduce((s,a)=>s+Math.abs(a.balance||0),0);
+          const assetsSum=manualAssetsOnly.reduce((s,a)=>s+(a.value||0),0)+assetsPlaid;
+          const liabilitiesTotal=manualLiabilities.reduce((s,a)=>s+(a.value||0),0)+liabPlaid;
           const netWorth=assetsSum-liabilitiesTotal;
           const prevSnap=networthSnapshots.length>=2?networthSnapshots[networthSnapshots.length-2]:null;
           const momDelta=prevSnap?netWorth-prevSnap.netWorth:null;
@@ -2130,6 +2134,7 @@ export default function App(){
           return(<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:700}}>Net Worth</div>
+              <button style={S.btn("#6366F1")} onClick={loadBalances} disabled={loadingBalances}>{loadingBalances?"Refreshing…":"↻ Refresh balances"}</button>
             </div>
 
             {/* KPI cards */}
@@ -2144,13 +2149,13 @@ export default function App(){
                 <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#16A34A",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
                 <div style={{...S.klabel,marginTop:6}}>Total Assets</div>
                 <div style={S.kval("#16A34A")}>{c0(assetsSum)}</div>
-                <div style={S.ksub}>{manualAssetsOnly.length} item{manualAssetsOnly.length!==1?"s":""} · manual</div>
+                <div style={S.ksub}>{plaidDeposit.length>0?`${c0(assetsPlaid)} connected · `:""}{ c0(manualAssetsOnly.reduce((s,a)=>s+(a.value||0),0))} manual</div>
               </div>
               <div style={S.kpi}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#B91C1C",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
                 <div style={{...S.klabel,marginTop:6}}>Total Liabilities</div>
                 <div style={S.kval("#B91C1C")}>{c0(liabilitiesTotal)}</div>
-                <div style={S.ksub}>{manualLiabilities.length} item{manualLiabilities.length!==1?"s":""} · manual</div>
+                <div style={S.ksub}>{plaidCredit.length>0?`${c0(liabPlaid)} connected · `:""}{c0(manualLiabilities.reduce((s,a)=>s+(a.value||0),0))} manual</div>
               </div>
             </div>
 
@@ -2196,11 +2201,20 @@ export default function App(){
                       </div>
                     </div>
                   )}
+                  {plaidDeposit.map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}{a.mask?` ···${a.mask}`:""}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{a.institution} · {a.subtype||a.type}</div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#16A34A"}}>{c2(a.balance||0)}</div>
+                    </div>
+                  ))}
                   {manualAssetsOnly.map(a=>(
                     <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
                       <div>
                         <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
-                        <div style={{fontSize:10,color:T.subtle}}>{ASSET_TYPES[a.type]||a.type}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{ASSET_TYPES[a.type]||a.type} · manual</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#16A34A"}}>{c2(a.value)}</div>
@@ -2208,7 +2222,7 @@ export default function App(){
                       </div>
                     </div>
                   ))}
-                  {manualAssetsOnly.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No assets yet — add your home, car, savings, or investments manually</div>}
+                  {plaidDeposit.length===0&&manualAssetsOnly.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No assets — connect a bank or add manually</div>}
                 </div>
 
                 {/* Liabilities */}
@@ -2242,11 +2256,20 @@ export default function App(){
                       </div>
                     </div>
                   )}
+                  {plaidCredit.map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}{a.mask?` ···${a.mask}`:""}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{a.institution} · {a.subtype||a.type}</div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#B91C1C"}}>{c2(Math.abs(a.balance||0))}</div>
+                    </div>
+                  ))}
                   {manualLiabilities.map(a=>(
                     <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
                       <div>
                         <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
-                        <div style={{fontSize:10,color:T.subtle}}>{LIABILITY_TYPES[a.type]||a.type}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{LIABILITY_TYPES[a.type]||a.type} · manual</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#B91C1C"}}>{c2(a.value)}</div>
@@ -2254,7 +2277,7 @@ export default function App(){
                       </div>
                     </div>
                   ))}
-                  {manualLiabilities.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No liabilities — add credit cards, loans, or mortgages</div>}
+                  {plaidCredit.length===0&&manualLiabilities.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No liabilities — connect a bank or add credit cards/loans manually</div>}
                 </div>
               </div>
 
