@@ -112,7 +112,7 @@ function detectSubscriptions(monthData){
 // ── SPENDING INSIGHTS ─────────────────────────────────────────────
 function generateInsights(monthData, cats, budgets, vm, vy){
   const getMD=(y,m)=>monthData[`${y}-${String(m).padStart(2,"0")}`]||{income:0,bonus:0,transactions:[]};
-  const catSpend=(y,m,id)=>(getMD(y,m).transactions||[]).filter(t=>t.cat===id&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+  const catSpend=(y,m,id)=>(getMD(y,m).transactions||[]).filter(t=>t.cat===id&&!t.isReimb&&!t.isPaidForOther).reduce((s,t)=>s+(t.amount||0),0);
   const insights=[];
 
   // Per-category vs 3-month rolling average
@@ -494,6 +494,14 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
                 <input type="text" style={S.input} placeholder="Note (optional)" value={editTxForm.note}
                   onChange={e=>setEditTxForm({...editTxForm,note:e.target.value})}/>
               </div>
+              <div style={{marginBottom:8,padding:"10px 12px",background:"#FFF7ED",borderRadius:8,border:"1px solid #FED7AA"}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"#C2410C"}}>
+                  <input type="checkbox" checked={!!editTxForm.isPaidForOther}
+                    onChange={e=>setEditTxForm({...editTxForm,isPaidForOther:e.target.checked})}/>
+                  Paid for someone else — exclude from my expenses
+                </label>
+                {editTxForm.isPaidForOther&&<div style={{fontSize:11,color:"#9A3412",marginTop:6}}>This transaction will be voided from your spending totals and budgets.</div>}
+              </div>
               <div style={{marginBottom:10,padding:"10px 12px",background:"#F8FAFC",borderRadius:8,border:"1px solid #E2E8F0"}}>
                 <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"#1565C0"}}>
                   <input type="checkbox" checked={!!editTxForm.isSplit}
@@ -527,19 +535,20 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
           );
         }
         return (
-          <div key={tx.id} style={S.txrow}>
-            <div style={{width:38,height:38,borderRadius:10,background:tx.isReimb?"#D1FAE5":cc+"1a",border:`1.5px solid ${tx.isReimb?"#6EE7B7":cc+"30"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <span style={{fontSize:15,fontWeight:700,color:tx.isReimb?"#059669":cc,lineHeight:1}}>
-                {tx.isReimb?"↩":(tx.merchant||"?")[0].toUpperCase()}
+          <div key={tx.id} style={{...S.txrow,opacity:tx.isPaidForOther?0.5:1}}>
+            <div style={{width:38,height:38,borderRadius:10,background:tx.isPaidForOther?"#FFF7ED":tx.isReimb?"#D1FAE5":cc+"1a",border:`1.5px solid ${tx.isPaidForOther?"#FED7AA":tx.isReimb?"#6EE7B7":cc+"30"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{fontSize:15,fontWeight:700,color:tx.isPaidForOther?"#C2410C":tx.isReimb?"#059669":cc,lineHeight:1}}>
+                {tx.isPaidForOther?"↷":tx.isReimb?"↩":(tx.merchant||"?")[0].toUpperCase()}
               </span>
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,fontWeight:500}}>{tx.merchant}</span>
+                {tx.isPaidForOther&&<Pill label="↷ paid for others" color="#C2410C" bg="#FFF7ED"/>}
                 {tx.recurringId&&<Pill label="recurring" color="#0F6E56" bg="#E1F5EE"/>}
                 {tx.isReimb&&<Pill label="reimbursement ↩" color="#1D9E75" bg="#E1F5EE"/>}
                 {tx.isSplit&&<Pill label="split" color="#1565C0" bg="#E3F2FD"/>}
-                {tx.amount>=200&&!tx.isReimb&&<Pill label="large" color="#7C3AED" bg="#EDE9FE"/>}
+                {tx.amount>=200&&!tx.isReimb&&!tx.isPaidForOther&&<Pill label="large" color="#7C3AED" bg="#EDE9FE"/>}
                 <Pill label={cl_(tx.cat)} color={cc} bg={cb}/>
               </div>
               {tx.note&&<div style={{fontSize:10,color:"#64748B"}}>{tx.note}</div>}
@@ -730,7 +739,7 @@ export default function App(){
   })();
   const payDates=getPayDates(settings.firstPaycheck,settings.payCycle||14,vy,vm);
 
-  const catSpend=(cat,txs=txList)=>txs.filter(t=>t.cat===cat&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+  const catSpend=(cat,txs=txList)=>txs.filter(t=>t.cat===cat&&!t.isReimb&&!t.isPaidForOther).reduce((s,t)=>s+(t.amount||0),0);
   const reimbReceived=txList.filter(t=>t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
   const rawSpend=cats.reduce((s,c)=>s+catSpend(c.id),0)-reimbReceived;
   const totalSpent=Math.max(0,rawSpend);
@@ -842,7 +851,7 @@ export default function App(){
       date:tx.date, merchant:tx.merchant, cat:tx.cat,
       amount:String(tx.isSplit?tx.totalBill||tx.amount:tx.amount),
       note:tx.note||"", isSplit:tx.isSplit||false,
-      splitCount:ways,
+      splitCount:ways, isPaidForOther:tx.isPaidForOther||false,
     });
   };
 
@@ -854,7 +863,7 @@ export default function App(){
     const txs=(ex.transactions||[]).map(t=>t.id!==id?t:{...t,
       date:editTxForm.date, merchant:editTxForm.merchant, cat:editTxForm.cat,
       amount:myShare, note:editTxForm.note,
-      isSplit:editTxForm.isSplit,
+      isSplit:editTxForm.isSplit, isPaidForOther:editTxForm.isPaidForOther||false,
       totalBill:editTxForm.isSplit?total:0,
       splitWith:editTxForm.isSplit
         ?Array.from({length:editTxForm.splitCount-1},(_,i)=>
