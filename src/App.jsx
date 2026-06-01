@@ -391,6 +391,7 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
                 {tx.recurringId&&<Pill label="recurring" color="#0F6E56" bg="#E1F5EE"/>}
                 {tx.isReimb&&<Pill label="reimbursement ↩" color="#1D9E75" bg="#E1F5EE"/>}
                 {tx.isSplit&&<Pill label="split" color="#1565C0" bg="#E3F2FD"/>}
+                {tx.amount>=200&&!tx.isReimb&&<Pill label="large" color="#7C3AED" bg="#EDE9FE"/>}
                 <Pill label={cl_(tx.cat)} color={cc} bg={cb}/>
               </div>
               {tx.note&&<div style={{fontSize:10,color:"#64748B"}}>{tx.note}</div>}
@@ -966,6 +967,22 @@ export default function App(){
         {/* ══ OVERVIEW ══ */}
         {tab==="overview"&&(<>
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
+          {(()=>{
+            const overBudget=cats.filter(cat=>{const sp=catSpend(cat.id);const eff=getEffBudget(cat.id,vy,vm);return eff>0&&sp>eff;});
+            return overBudget.length>0&&(
+              <div style={{background:"#FEF2F2",border:"1.5px solid #FCA5A5",borderRadius:10,padding:"10px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontSize:16}}>⚠️</span>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#991B1B"}}>Over budget: </span>
+                  {overBudget.map((cat,i)=>{
+                    const sp=catSpend(cat.id); const eff=getEffBudget(cat.id,vy,vm);
+                    return <span key={cat.id} style={{fontSize:12,color:"#991B1B"}}>{cat.label} ({c0(sp-eff)} over){i<overBudget.length-1?", ":""}</span>;
+                  })}
+                </div>
+                <button style={{...S.btn("#991B1B"),fontSize:11,padding:"3px 10px"}} onClick={()=>setTab("txns")}>View transactions →</button>
+              </div>
+            );
+          })()}
           <IncomeRow incAvail={incAvail} settings={settings} editIncome={editIncome} setEditIncome={setEditIncome}
             tempVal={tempVal} setTempVal={setTempVal} curMD={curMD} updMD={updMD} vy={vy} vm={vm}
             isFirstPayMonth={isFirstPayMonth} payDates={payDates} pendingTotal={pendingTotal} setTab={setTab}/>
