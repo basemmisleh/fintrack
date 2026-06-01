@@ -344,23 +344,19 @@ function MonthBar({vm,vy,monthData,setVm,setVy}){
   const goForward=()=>{
     if(vm===11){setVm(0);setVy(y=>y+1);}else setVm(m=>m+1);
   };
+  const arrowStyle={width:28,height:28,borderRadius:8,background:"transparent",border:"none",color:S.T.muted,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color 0.15s",padding:0,fontFamily:"inherit"};
   return(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,gap:8}}>
-      <button onClick={goBack}
-        style={{width:34,height:34,borderRadius:10,background:S.T.elevated,border:`1px solid ${S.T.border}`,color:S.T.muted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
-        ‹
-      </button>
-      <div style={{textAlign:"center"}}>
-        <div style={{fontSize:15,fontWeight:700,color:S.T.text,letterSpacing:"-0.3px"}}>
-          {FULLMONTHS[vm]} {vy}
-          {isNow&&<span style={{marginLeft:6,fontSize:9,background:S.T.elevated,color:S.T.muted,borderRadius:10,padding:"2px 7px",fontWeight:600,verticalAlign:"middle"}}>current</span>}
+    <div style={{display:"flex",alignItems:"center",marginBottom:20}}>
+      <div style={{display:"inline-flex",alignItems:"center",gap:2,background:S.T.elevated,border:`1px solid ${S.T.border}`,borderRadius:10,padding:"4px 6px"}}>
+        <button onClick={goBack} style={arrowStyle}>‹</button>
+        <div style={{padding:"0 10px",textAlign:"center"}}>
+          <span style={{fontSize:14,fontWeight:700,color:S.T.text,letterSpacing:"-0.3px"}}>{FULLMONTHS[vm]} {vy}</span>
+          {isNow&&<span style={{marginLeft:6,fontSize:9,color:S.T.subtle,fontWeight:500}}>·</span>}
+          {isNow&&<span style={{marginLeft:3,fontSize:9,color:S.T.subtle,fontWeight:500}}>now</span>}
         </div>
-        {hasTxs&&<div style={{fontSize:10,color:S.T.subtle,marginTop:1}}>has transactions</div>}
+        <button onClick={goForward} style={arrowStyle}>›</button>
       </div>
-      <button onClick={goForward}
-        style={{width:34,height:34,borderRadius:10,background:S.T.elevated,border:`1px solid ${S.T.border}`,color:S.T.muted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
-        ›
-      </button>
+      {hasTxs&&<span style={{marginLeft:10,fontSize:10,color:S.T.subtle}}>has data</span>}
     </div>
   );
 }
