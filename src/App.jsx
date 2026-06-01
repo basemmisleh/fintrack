@@ -1699,6 +1699,35 @@ export default function App(){
               </div>
             </div>
           )}
+          {/* Spending pace summary */}
+          {(()=>{
+            const daysInMonth=new Date(vy,vm+1,0).getDate();
+            const daysPassed=vm===CUR_M&&vy===CUR_Y?Math.min(new Date().getDate(),daysInMonth):daysInMonth;
+            const daysLeft=daysInMonth-daysPassed;
+            const dailyAvg=daysPassed>0?totalSpent/daysPassed:0;
+            const projSpend=dailyAvg*daysInMonth;
+            const totalBudget=Object.values(budgets).reduce((s,v)=>s+v,0);
+            const onPace=projSpend<=totalBudget;
+            if(!txList.length) return null;
+            return(
+              <div className="ft-card" style={{...S.card,marginBottom:14,display:"flex",gap:0,padding:0,overflow:"hidden"}}>
+                {[
+                  {label:"Spent",   val:c0(totalSpent),  color:totalSpent>totalBudget?"#B91C1C":T.text},
+                  {label:"Daily avg",val:c0(dailyAvg),   color:A},
+                  {label:"Days left",val:String(daysLeft),color:"#B45309"},
+                  {label:"Proj. total",val:c0(projSpend),color:onPace?"#16A34A":"#B91C1C"},
+                ].map((s,i)=>(
+                  <div key={i} style={{flex:1,padding:"14px 16px",borderRight:i<3?`1px solid ${T.border}`:"none",minWidth:0}}>
+                    <div style={S.klabel}>{s.label}</div>
+                    <div style={{fontSize:18,fontWeight:800,color:s.color,fontFamily:"'Fira Code','IBM Plex Mono',monospace",letterSpacing:"-0.5px",marginTop:2}}>{s.val}</div>
+                  </div>
+                ))}
+                <div style={{display:"flex",alignItems:"center",padding:"0 16px",flexShrink:0}}>
+                  <span style={{padding:"4px 12px",borderRadius:20,background:onPace?"#D1FAE5":"#FEE2E2",color:onPace?"#16A34A":"#B91C1C",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{onPace?"On pace ↑":"Over pace ↓"}</span>
+                </div>
+              </div>
+            );
+          })()}
           {showTxForm&&<TxForm txForm={txForm} setTxForm={setTxForm} splitPeople={splitPeople} setSplitPeople={setSplitPeople} addTx={addTx} setShowTxForm={setShowTxForm} cats={cats}/>}
           {!showTxForm&&(
             <div style={{marginBottom:10}}>
@@ -1887,6 +1916,69 @@ export default function App(){
             <div style={{fontSize:15,fontWeight:700}}>Recurring</div>
             <button style={S.btnS("#6366F1")} onClick={()=>setShowRecurForm(!showRecurForm)}>{showRecurForm?"✕ Cancel":"+ Add Recurring"}</button>
           </div>
+
+          {/* Recurring KPI summary + bills calendar */}
+          {(()=>{
+            const monthlyTotal=recurring.reduce((s,r)=>{
+              if(r.freq==="monthly") return s+(r.amount||0);
+              if(r.freq==="biweekly") return s+(r.amount||0)*2.17;
+              if(r.freq==="weekly") return s+(r.amount||0)*4.33;
+              return s;
+            },0);
+            const annualTotal=monthlyTotal*12;
+            const upcoming=getUpcomingPayments(recurring,monthData,60);
+            const nextBill=upcoming[0]||null;
+            const daysInMonth=new Date(vy,vm+1,0).getDate();
+            const todayDate=CUR_M===vm&&CUR_Y===vy?new Date().getDate():-1;
+            const billsByDay={};
+            recurring.forEach(r=>{
+              if(r.freq==="monthly"&&r.startDate){
+                const day=parseInt(r.startDate.split("-")[2]||"1");
+                if(!billsByDay[day]) billsByDay[day]=[];
+                billsByDay[day].push(r);
+              }
+            });
+            return(<>
+              <div className="ft-g3" style={{...S.g3,marginBottom:16}}>
+                {[
+                  {l:"Monthly committed",v:c0(monthlyTotal),c:A,s:`${recurring.length} active bills`},
+                  {l:"Annual total",      v:c0(annualTotal), c:"#B91C1C",s:"auto-renewing costs"},
+                  {l:"Next bill",         v:nextBill?c2(nextBill.amount):"—",c:"#B45309",s:nextBill?`${nextBill.name} · in ${nextBill.daysAway}d`:"none due soon"},
+                ].map((k,i)=>(
+                  <div key={i} className="ft-kpi-card" style={S.kpi}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:`linear-gradient(90deg,${k.c},${k.c}99)`,borderRadius:"18px 18px 0 0"}}/>
+                    <div style={{...S.klabel,marginTop:8}}>{k.l}</div>
+                    <div style={S.kval(k.c)}>{k.v}</div>
+                    <div style={S.ksub}>{k.s}</div>
+                  </div>
+                ))}
+              </div>
+              {Object.keys(billsByDay).length>0&&(
+                <div className="ft-card" style={{...S.card,marginBottom:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={S.ptitle}>Bills calendar — {FULLMONTHS[vm]}</div>
+                    <span style={{fontSize:10,color:T.subtle}}>Monthly bills only</span>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {Array.from({length:daysInMonth},(_,i)=>{
+                      const day=i+1;
+                      const bills=billsByDay[day]||[];
+                      const isToday=day===todayDate;
+                      const isPast=todayDate>0&&day<todayDate;
+                      const total=bills.reduce((s,r)=>s+(r.amount||0),0);
+                      return(
+                        <div key={day} title={bills.map(b=>b.name).join(", ")} style={{width:44,minHeight:50,borderRadius:8,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"4px 2px",background:bills.length>0?(isToday?A+"22":T.elevated):"transparent",border:isToday?`1.5px solid ${A}`:bills.length>0?`1px solid ${T.border}`:"none",opacity:isPast?0.45:1,cursor:bills.length>0?"default":"default",position:"relative"}}>
+                          <div style={{fontSize:10,fontWeight:isToday?700:bills.length?600:400,color:bills.length>0?(isToday?A:T.text):T.subtle}}>{day}</div>
+                          {bills.length>0&&<div style={{fontSize:8,color:A,fontWeight:700,marginTop:2,lineHeight:1.2,textAlign:"center"}}>{c0(total)}</div>}
+                          {bills.length>0&&<div style={{fontSize:7,color:T.muted,marginTop:1,lineHeight:1.1,textAlign:"center",maxWidth:42,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{bills[0].name}{bills.length>1?` +${bills.length-1}`:""}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>);
+          })()}
 
           {(()=>{
             const detected=detectSubscriptions(monthData).filter(s=>!dismissedSubs.includes(s.id)&&!recurring.some(r=>r.name.toLowerCase()===s.merchant.toLowerCase()));
@@ -2235,6 +2327,48 @@ export default function App(){
               </div>
             ))}
           </div>
+          {/* Monthly cash flow bar chart */}
+          {(()=>{
+            const months=MONTHS.map((m,i)=>{
+              const md=getMD(vy,i);
+              const inc=(md.income||0)+(md.bonus||0);
+              const reimbs=(md.transactions||[]).filter(t=>t.isReimb).reduce((s,t)=>s+t.amount,0);
+              const sp=Math.max(0,(md.transactions||[]).filter(t=>!t.isReimb).reduce((s,t)=>s+(t.amount||0),0)-reimbs);
+              const has=(md.transactions||[]).length>0||inc>0;
+              return{m,inc,sp,has,isNow:i===CUR_M&&vy===CUR_Y};
+            });
+            const maxV=Math.max(...months.map(m=>Math.max(m.inc,m.sp)),1);
+            const H=100; const barW=14; const gap=3; const gapGroup=8; const gW=barW*2+gap;
+            const W=months.length*(gW+gapGroup);
+            return(
+              <div className="ft-card" style={{...S.card,marginBottom:18}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div style={S.ptitle}>Monthly cash flow — {vy}</div>
+                  <div style={{display:"flex",gap:14}}>
+                    {[["#16A34A","Income"],["#6366F1","Spending"]].map(([c,l])=>(
+                      <div key={l} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:9,height:9,borderRadius:2,background:c}}/><span style={{fontSize:10,color:T.muted}}>{l}</span></div>
+                    ))}
+                  </div>
+                </div>
+                <svg viewBox={`0 0 ${W} ${H+18}`} style={{width:"100%",height:H+18,display:"block",overflow:"visible"}}>
+                  {months.map(({m,inc,sp,has,isNow},i)=>{
+                    const x=i*(gW+gapGroup);
+                    const incH=has?Math.max(3,(inc/maxV)*H):3;
+                    const spH=has?Math.max(3,(sp/maxV)*H):3;
+                    return(
+                      <g key={i} onClick={()=>{setVm(i);setTab("overview");}} style={{cursor:"pointer"}}>
+                        <rect x={x} y={H-incH} width={barW} height={incH} fill={has?"#16A34A":"#E2E8F0"} rx={3} opacity={isNow?1:has?0.75:0.3}/>
+                        <rect x={x+barW+gap} y={H-spH} width={barW} height={spH} fill={has?(sp>inc?"#B91C1C":A):"#E2E8F0"} rx={3} opacity={isNow?1:has?0.75:0.3}/>
+                        {isNow&&<rect x={x-2} y={0} width={gW+4} height={H+2} fill={A} opacity={0.06} rx={4}/>}
+                        <text x={x+gW/2} y={H+13} textAnchor="middle" fontSize="8" fill={isNow?A:T.subtle} fontWeight={isNow?700:400}>{m}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            );
+          })()}
+
           <div className="ft-g2" style={S.g2}>
             <div className="ft-card" style={S.card}>
               <div style={S.ptitle}>Month by month — {vy}</div>
@@ -2289,22 +2423,49 @@ export default function App(){
             <div style={{fontSize:15,fontWeight:700}}>Savings Goals</div>
             <button style={S.btnS("#16A34A")} onClick={()=>{const next=[...goals,{id:Date.now(),name:"New Goal",target:5000,saved:0,color:"#185FA5"}];setGoals(next);save("v3_goals",next);}}>+ Add Goal</button>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}>
-            {goals.map(goal=>{
-              const p=goal.target>0?Math.min(1,goal.saved/goal.target):0; const done=p>=1;
+          {(()=>{
+            // avg monthly savings across all months with data this year
+            let savTotal=0; let savCount=0;
+            for(let i=0;i<12;i++){const md=getMD(CUR_Y,i);const inc=(md.income||0)+(md.bonus||0);const sp=Math.max(0,(md.transactions||[]).filter(t=>!t.isReimb).reduce((s,t)=>s+(t.amount||0),0));if(inc>0){savTotal+=Math.max(0,inc-sp);savCount++;}}
+            const avgMonthlySavings=savCount>0?savTotal/savCount:0;
+            return(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}>
+                {goals.map(goal=>{
+                  const p=goal.target>0?Math.min(1,goal.saved/goal.target):0; const done=p>=1;
+                  const remaining=Math.max(0,goal.target-goal.saved);
+                  const monthsNeeded=avgMonthlySavings>0&&!done?Math.ceil(remaining/avgMonthlySavings):null;
+                  const projDate=monthsNeeded?new Date(CUR_Y,CUR_M+monthsNeeded,1):null;
+                  const projStr=projDate?projDate.toLocaleDateString("en-US",{month:"short",year:"numeric"}):null;
               return (
-                <div key={goal.id} style={{...S.card,border:`1.5px solid ${done?"#5DCAA5":"#E2E8F0"}`}}>
+                <div key={goal.id} style={{...S.card,border:`1.5px solid ${done?"#5DCAA5":T.border}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                     <input value={goal.name} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,name:e.target.value}:g);setGoals(next);save("v3_goals",next);}}
-                      style={{background:"transparent",border:"none",outline:"none",fontSize:14,fontWeight:700,color:"#0F172A",fontFamily:"inherit",flex:1}}/>
+                      style={{background:"transparent",border:"none",outline:"none",fontSize:14,fontWeight:700,color:T.text,fontFamily:"inherit",flex:1}}/>
                     {done&&<Pill label="Complete ✓" color="#16A34A" bg="#E1F5EE"/>}
                   </div>
                   <div style={{marginBottom:10}}>
                     <Bar val={goal.saved} max={goal.target||1} color={done?"#16A34A":goal.color} h={8}/>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748B",marginTop:4}}>
-                      <span>{pct(p,0)} complete</span><span>{c0(Math.max(0,goal.target-goal.saved))} to go</span>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:T.muted,marginTop:4}}>
+                      <span>{pct(p,0)} complete</span><span>{c0(remaining)} to go</span>
                     </div>
                   </div>
+                  {/* Time to goal */}
+                  {!done&&(
+                    <div style={{background:T.elevated,borderRadius:10,padding:"10px 12px",marginBottom:10,display:"flex",gap:16,flexWrap:"wrap"}}>
+                      <div>
+                        <div style={{fontSize:9,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:2}}>Est. completion</div>
+                        <div style={{fontSize:13,fontWeight:700,color:projStr?goal.color:T.subtle}}>{projStr||"Set income to project"}</div>
+                      </div>
+                      {monthsNeeded&&<div>
+                        <div style={{fontSize:9,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:2}}>At current savings rate</div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.muted}}>{monthsNeeded} month{monthsNeeded!==1?"s":""}</div>
+                      </div>}
+                      {avgMonthlySavings>0&&<div>
+                        <div style={{fontSize:9,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.6px",marginBottom:2}}>Avg/mo saving</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#16A34A"}}>{c0(avgMonthlySavings)}</div>
+                      </div>}
+                    </div>
+                  )}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                     <div><div style={S.slabel}>Target</div>
                       <input type="number" inputMode="decimal" value={goal.target} onChange={e=>{const next=goals.map(g=>g.id===goal.id?{...g,target:parseFloat(e.target.value)||0}:g);setGoals(next);save("v3_goals",next);}} style={S.input}/></div>
@@ -2313,12 +2474,14 @@ export default function App(){
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:12,fontWeight:700,color:goal.color}}>{c2(goal.saved)} / {c2(goal.target)}</span>
-                    <button onClick={()=>{const next=goals.filter(g=>g.id!==goal.id);setGoals(next);save("v3_goals",next);}} style={{background:"none",border:"none",color:"#CBD5E1",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>remove</button>
+                    <button onClick={()=>{const next=goals.filter(g=>g.id!==goal.id);setGoals(next);save("v3_goals",next);}} style={{background:"none",border:"none",color:T.subtle,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>remove</button>
                   </div>
                 </div>
               );
-            })}
-          </div>
+                })}
+              </div>
+            );
+          })()}
         </>)}
 
         {/* ══ ROTH IRA ══ */}
