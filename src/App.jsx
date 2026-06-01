@@ -642,7 +642,7 @@ export default function App(){
   const [monthData,      setMonthData]      = useState({});
   const [budgets,        setBudgets]        = useState({housing:1500,groceries:400,dining:200,transport:250,entertain:150,subs:80,hustle:0,savings:500,roth:500,split:0,other:100});
   const [goals,          setGoals]          = useState([{id:1,name:"Emergency Fund",target:15000,saved:0,color:"#1D9E75"},{id:2,name:"Vacation",target:3000,saved:0,color:"#6366F1"}]);
-  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{},flagKeywords:["Amex Send"]});
+  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{},flagKeywords:["Amex Send"],excludedAccounts:[]});
   const [drillCat,       setDrillCat]       = useState(null);
   const [cats,           setCats]           = useState(DEFAULT_CATS);
   const [recurring,      setRecurring]      = useState([]);
@@ -967,12 +967,18 @@ export default function App(){
       if (data.skipped?.length) {
         alert(`${data.skipped.join(", ")}: still loading initial transactions. Plaid needs a few minutes on first connect. Try again shortly.`);
       }
-      setSyncedTxs(fresh);
       const keywords = settings.flagKeywords || [];
+      const excluded = settings.excludedAccounts || [];
+      // Auto-mark transactions from extension cards
+      const markedFresh = fresh.map(t => {
+        const isExtension = excluded.some(acct => t.account && t.account.toLowerCase().includes(acct.toLowerCase()));
+        return isExtension ? { ...t, isPaidForOther: true } : t;
+      });
+      setSyncedTxs(markedFresh);
       const sel = {};
-      fresh.forEach(t => {
+      markedFresh.forEach(t => {
         const flagged = keywords.some(kw => kw && t.merchant.toLowerCase().includes(kw.toLowerCase()));
-        sel[t.plaid_id] = !flagged;
+        sel[t.plaid_id] = !flagged && !t.isPaidForOther;
       });
       setImportSelections(sel);
       loadConnections();
@@ -1398,24 +1404,51 @@ export default function App(){
             <div style={{...S.card,marginBottom:16}}>
               <div style={S.ptitle}>Your banks</div>
               {connections.map(conn=>(
-                <div key={conn.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 0",borderBottom:"1px solid #F1F5F9"}}>
-                  <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🏦</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700}}>{conn.institution_name}</div>
-                    <div style={{fontSize:11,color:"#64748B"}}>
-                      {(conn.accounts||[]).map((a,i)=>(
-                        <span key={i}>{a.name}{a.mask?` ···${a.mask}`:""}{i<conn.accounts.length-1?" · ":""}</span>
-                      ))}
+                <div key={conn.id} style={{padding:"12px 0",borderBottom:"1px solid #F1F5F9"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14}}>
+                    <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🏦</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700}}>{conn.institution_name}</div>
+                      <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
+                        Last synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
+                      </div>
                     </div>
-                    <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
-                      Last synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                      <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
+                      <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
+                        style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
                     </div>
                   </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-                    <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
-                    <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
-                      style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
-                  </div>
+                  {/* Individual card toggles */}
+                  {(conn.accounts||[]).length>0&&(
+                    <div style={{marginTop:10,marginLeft:56,display:"flex",flexDirection:"column",gap:6}}>
+                      {(conn.accounts||[]).map(a=>{
+                        const acctKey=a.name+(a.mask?` ···${a.mask}`:"");
+                        const isExcluded=(settings.excludedAccounts||[]).includes(acctKey);
+                        return(
+                          <div key={a.id||a.mask} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:isExcluded?"#FFF7ED":"#F8FAFC",borderRadius:8,padding:"7px 12px",border:`1px solid ${isExcluded?"#FED7AA":"#E2E8F0"}`}}>
+                            <div>
+                              <span style={{fontSize:12,fontWeight:600,color:isExcluded?"#C2410C":"#0F172A"}}>{acctKey}</span>
+                              <span style={{fontSize:10,color:"#94A3B8",marginLeft:8}}>{a.subtype||a.type}</span>
+                            </div>
+                            <button
+                              onClick={()=>{
+                                const cur=settings.excludedAccounts||[];
+                                const next=isExcluded?cur.filter(x=>x!==acctKey):[...cur,acctKey];
+                                const s={...settings,excludedAccounts:next};
+                                setSettings(s); save("v3_settings",s);
+                              }}
+                              style={{...S.btn(isExcluded?"#C2410C":"#1D9E75"),padding:"3px 10px",fontSize:11,whiteSpace:"nowrap"}}>
+                              {isExcluded?"↷ Extension card":"✓ My card"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {(settings.excludedAccounts||[]).some(x=>(conn.accounts||[]).some(a=>(a.name+(a.mask?` ···${a.mask}`:""))===x))&&(
+                        <div style={{fontSize:10,color:"#C2410C",marginTop:2}}>Extension card transactions will be auto-flagged as "paid for someone else" on next sync.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center"}}>
