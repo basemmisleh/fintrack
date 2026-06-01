@@ -816,7 +816,27 @@ export default function App(){
     try{
       const res=await fetch(`${FUNC_BASE}/plaid-get-balances`,{method:"POST"});
       const data=await res.json();
-      if(data.accounts) setPlaidBalances(data.accounts);
+      if(data.accounts){
+        const accounts=data.accounts;
+        setPlaidBalances(accounts);
+        // Save net worth snapshot after fresh balance load
+        const deposit=accounts.filter(a=>a.type==="depository"||a.type==="investment");
+        const credit=accounts.filter(a=>a.type==="credit"||a.type==="loan");
+        const ap=deposit.reduce((s,a)=>s+(a.balance||0),0);
+        const lp=credit.reduce((s,a)=>s+Math.abs(a.balance||0),0);
+        setNetworthSnapshots(prev=>{
+          const manA=(JSON.parse(localStorage.getItem("v3_manual_assets")||"[]")).filter(a=>!a.isLiability);
+          const manL=(JSON.parse(localStorage.getItem("v3_manual_assets")||"[]")).filter(a=>a.isLiability);
+          const aSum=manA.reduce((s,a)=>s+(a.value||0),0)+ap;
+          const lSum=manL.reduce((s,a)=>s+(a.value||0),0)+lp;
+          const nw=aSum-lSum;
+          const date=mkKey(CUR_Y,CUR_M);
+          const snap={date,netWorth:nw,assets:aSum,liabilities:lSum};
+          const next=[...prev.filter(s=>s.date!==date),snap].sort((a,b)=>a.date.localeCompare(b.date)).slice(-24);
+          save("v3_nw_snapshots",next);
+          return next;
+        });
+      }
     }catch(e){console.error("Balance load error:",e);}
     finally{setLoadingBalances(false);}
   };
@@ -2130,7 +2150,6 @@ export default function App(){
           const momDelta=prevSnap?netWorth-prevSnap.netWorth:null;
           const ASSET_TYPES={real_estate:"Real Estate",vehicle:"Vehicle",cash:"Cash / Savings",crypto:"Crypto",investment:"Investment",other:"Other"};
           const LIABILITY_TYPES={credit_card:"Credit Card",student_loan:"Student Loan",mortgage:"Mortgage",auto_loan:"Auto Loan",personal_loan:"Personal Loan",other:"Other Debt"};
-          if(assetsSum>0||liabilitiesTotal>0) saveSnapshot(netWorth,assetsSum,liabilitiesTotal);
           return(<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:700}}>Net Worth</div>
