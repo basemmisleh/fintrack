@@ -400,7 +400,7 @@ function MerchantLogo({merchant,size=38,color,bg,isReimb,isPaidForOther}){
   );
   if(!err&&domain) return(
     <div style={{width:size,height:size,borderRadius:r,overflow:"hidden",flexShrink:0,background:"#FFF",border:"1px solid #E8ECF0",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-      <img src={`https://logo.clearbit.com/${domain}`} onError={()=>setErr(true)} alt="" style={{width:size*0.7,height:size*0.7,objectFit:"contain"}}/>
+      <img src={`https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`} onError={()=>setErr(true)} alt="" style={{width:size*0.72,height:size*0.72,objectFit:"contain"}}/>
     </div>
   );
   return(
