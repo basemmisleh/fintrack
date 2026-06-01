@@ -1130,8 +1130,8 @@ export default function App(){
                 {budget>0&&<div style={{marginTop:12}}><Bar val={total} max={Math.max(budget,total,1)} color={total>budget?"#E24B4A":cat.color} h={8}/></div>}
               </div>
 
-              {/* Bulk select bar */}
-              <div style={{...S.card,marginBottom:12,background:bulkMode?"#EEF2FF":"#FFF",border:bulkMode?"1.5px solid #AFA9EC":"1px solid #E2E8F0"}}>
+              {/* Bulk select bar — sticky */}
+              <div style={{...S.card,marginBottom:12,background:bulkMode?"#EEF2FF":"#FFF",border:bulkMode?"1.5px solid #AFA9EC":"1px solid #E2E8F0",position:"sticky",top:56,zIndex:20,boxShadow:"0 2px 8px rgba(15,23,42,0.08)"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                   <button style={bulkMode?S.btnS("#6366F1"):S.btn("#6366F1")} onClick={()=>{setBulkMode(v=>!v);setBulkSelected(new Set());}}>
                     {bulkMode?"✕ Cancel":"⊡ Select multiple"}
@@ -1432,7 +1432,7 @@ export default function App(){
             </div>
           </div>
           {bulkMode&&(
-            <div style={{...S.card,marginBottom:12,background:"#EEF2FF",border:"1.5px solid #AFA9EC"}}>
+            <div style={{...S.card,marginBottom:12,background:"#EEF2FF",border:"1.5px solid #AFA9EC",position:"sticky",top:56,zIndex:20,boxShadow:"0 2px 8px rgba(15,23,42,0.08)"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,fontWeight:600,color:"#6366F1"}}>{bulkSelected.size} selected</span>
                 <button style={{...S.btn("#64748B"),fontSize:11,padding:"3px 10px"}} onClick={()=>{const all=new Set(filteredTxList.map(t=>t.id));setBulkSelected(all);}}>Select all</button>
