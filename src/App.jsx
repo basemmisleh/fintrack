@@ -1055,10 +1055,27 @@ export default function App(){
       {/* TOPBAR */}
       <div style={S.topbar}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={S.logo}>fintrack</div>
-          <div style={{width:1,height:14,background:"#E2E8F0"}}/>
-          <div style={{fontSize:11,color:"#64748B"}}>{FULLMONTHS[vm]} {vy}</div>
-          {pendingTotal>0&&<div style={{fontSize:11,background:"#E3F2FD",color:"#1565C0",padding:"2px 8px",borderRadius:20,fontWeight:600,cursor:"pointer"}} onClick={()=>setTab("splits")}>💸 {c0(pendingTotal)}</div>}
+          {drillCat?(
+            <>
+              <button onClick={()=>{setDrillCat(null);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
+                style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:"#6366F1",fontWeight:700,fontSize:13,padding:0,fontFamily:"inherit"}}>
+                ← <span style={S.logo}>fintrack</span>
+              </button>
+              <div style={{width:1,height:14,background:"#E2E8F0"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat)}}/>
+                <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>{catLabel(cats,drillCat)}</span>
+                <span style={{fontSize:11,color:"#94A3B8"}}>{FULLMONTHS[vm]}</span>
+              </div>
+            </>
+          ):(
+            <>
+              <div style={S.logo}>fintrack</div>
+              <div style={{width:1,height:14,background:"#E2E8F0"}}/>
+              <div style={{fontSize:11,color:"#64748B"}}>{FULLMONTHS[vm]} {vy}</div>
+              {pendingTotal>0&&<div style={{fontSize:11,background:"#E3F2FD",color:"#1565C0",padding:"2px 8px",borderRadius:20,fontWeight:600,cursor:"pointer"}} onClick={()=>setTab("splits")}>💸 {c0(pendingTotal)}</div>}
+            </>
+          )}
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <button style={{...S.btn("#64748B"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowSettings(!showSettings)}>⚙</button>
@@ -1068,7 +1085,7 @@ export default function App(){
       </div>
 
       {/* NAV */}
-      <div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
+      {!drillCat&&<div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
         <div style={S.nav}>
           {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["networth","Net Worth"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
             <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
@@ -1076,9 +1093,78 @@ export default function App(){
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       <div style={S.body}>
+
+        {/* ══ CATEGORY DRILL-DOWN PAGE ══ */}
+        {drillCat&&(()=>{
+          const cat=cats.find(c=>c.id===drillCat)||{label:drillCat,color:"#888",bg:"#F5F5F5"};
+          const catTxs=txList.filter(t=>t.cat===drillCat);
+          const total=catSpend(drillCat);
+          const budget=getEffBudget(drillCat,vy,vm);
+          const count=catTxs.filter(t=>!t.isReimb&&!t.isPaidForOther).length;
+          return(
+            <div>
+              {/* Category hero */}
+              <div style={{background:`linear-gradient(135deg,${cat.color}18,${cat.color}08)`,border:`1px solid ${cat.color}30`,borderRadius:14,padding:"20px 24px",marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                  <div style={{width:44,height:44,borderRadius:12,background:cat.color,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <span style={{fontSize:20,color:"#FFF",fontWeight:800}}>{cat.label[0]}</span>
+                  </div>
+                  <div>
+                    <div style={{fontSize:22,fontWeight:800,color:"#0F172A",letterSpacing:"-0.5px"}}>{cat.label}</div>
+                    <div style={{fontSize:12,color:"#64748B"}}>{FULLMONTHS[vm]} {vy}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                  <div><div style={{fontSize:11,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Spent</div>
+                    <div style={{fontSize:26,fontWeight:800,color:cat.color,letterSpacing:"-0.5px"}}>{c0(total)}</div></div>
+                  {budget>0&&<div><div style={{fontSize:11,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Budget</div>
+                    <div style={{fontSize:26,fontWeight:800,color:"#0F172A",letterSpacing:"-0.5px"}}>{c0(budget)}</div></div>}
+                  {budget>0&&<div><div style={{fontSize:11,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Remaining</div>
+                    <div style={{fontSize:26,fontWeight:800,color:total>budget?"#A32D2D":"#1D9E75",letterSpacing:"-0.5px"}}>{c0(budget-total)}</div></div>}
+                  <div><div style={{fontSize:11,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Transactions</div>
+                    <div style={{fontSize:26,fontWeight:800,color:"#0F172A",letterSpacing:"-0.5px"}}>{count}</div></div>
+                </div>
+                {budget>0&&<div style={{marginTop:12}}><Bar val={total} max={Math.max(budget,total,1)} color={total>budget?"#E24B4A":cat.color} h={8}/></div>}
+              </div>
+
+              {/* Bulk select bar */}
+              <div style={{...S.card,marginBottom:12,background:bulkMode?"#EEF2FF":"#FFF",border:bulkMode?"1.5px solid #AFA9EC":"1px solid #E2E8F0"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <button style={bulkMode?S.btnS("#6366F1"):S.btn("#6366F1")} onClick={()=>{setBulkMode(v=>!v);setBulkSelected(new Set());}}>
+                    {bulkMode?"✕ Cancel":"⊡ Select multiple"}
+                  </button>
+                  {bulkMode&&<>
+                    <span style={{fontSize:12,fontWeight:600,color:"#6366F1"}}>{bulkSelected.size} selected</span>
+                    <button style={{...S.btn("#64748B"),fontSize:11,padding:"3px 10px"}} onClick={()=>setBulkSelected(new Set(catTxs.map(t=>t.id)))}>All</button>
+                    <button style={{...S.btn("#64748B"),fontSize:11,padding:"3px 10px"}} onClick={()=>setBulkSelected(new Set())}>Clear</button>
+                    <div style={{flex:1}}/>
+                    {bulkSelected.size>0&&<>
+                      <select value={bulkCat} onChange={e=>setBulkCat(e.target.value)} style={{...S.sel,width:140,fontSize:12}}>
+                        {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
+                      <button style={S.btnS("#6366F1")} onClick={applyBulkCat}>Apply to {bulkSelected.size}</button>
+                    </>}
+                  </>}
+                </div>
+              </div>
+
+              {/* Transaction list */}
+              <div style={S.card}>
+                {catTxs.length===0
+                  ?<div style={{textAlign:"center",padding:"32px 0",color:"#64748B",fontSize:12}}>No transactions in this category</div>
+                  :<TxList txs={catTxs} addReimb={addReimb} delTx={delTx} cats={cats}
+                    editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}
+                    bulkMode={bulkMode} bulkSelected={bulkSelected} setBulkSelected={setBulkSelected}/>
+                }
+              </div>
+            </div>
+          );
+        })()}
+
+        {!drillCat&&<>
 
         {/* SETTINGS */}
         {showSettings&&(
@@ -1265,20 +1351,9 @@ export default function App(){
               </div>
             );
           })()}
-          {drillCat&&(
-            <div style={{...S.card,marginBottom:16,border:"1.5px solid #AFA9EC"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                <button style={{...S.btn("#6366F1"),padding:"4px 12px",fontSize:11}} onClick={()=>{setDrillCat(null);startEditTx(null);}}>← Back</button>
-                <div style={{fontSize:14,fontWeight:700}}>{catLabel(cats,drillCat)}</div>
-                <div style={{fontSize:12,color:"#64748B"}}>{c0(catSpend(drillCat))} · {txList.filter(t=>t.cat===drillCat&&!t.isReimb).length} transactions</div>
-              </div>
-              <TxList txs={txList.filter(t=>t.cat===drillCat)} addReimb={addReimb} delTx={delTx} cats={cats}
-                editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}/>
-            </div>
-          )}
           <div style={S.g2}>
             <div style={S.card}>
-              <div style={S.ptitle}>Spending by category — click to drill down</div>
+              <div style={S.ptitle}>Spending by category</div>
               {cats.filter(cat=>catSpend(cat.id)>0||budgets[cat.id]>0).map(cat=>{
                 const sp=catSpend(cat.id);
                 const effBudget=getEffBudget(cat.id,vy,vm);
@@ -2069,6 +2144,8 @@ export default function App(){
             </div>
           </div>
         </>)}
+
+        </>} {/* end !drillCat */}
 
       </div>
 
