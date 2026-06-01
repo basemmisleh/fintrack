@@ -1009,7 +1009,7 @@ export default function App(){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div>
               <div style={{fontSize:15,fontWeight:700}}>Connected Accounts</div>
-              <div style={{fontSize:11,color:"#64748B",marginTop:2}}>Sandbox mode — test data only. Switch to production when ready.</div>
+              <div style={{fontSize:11,color:"#64748B",marginTop:2}}>Connect your bank accounts to automatically import transactions.</div>
             </div>
             <PlaidConnectButton onConnected={()=>loadConnections()}/>
           </div>
