@@ -68,6 +68,47 @@ function isRecurringDue(rec,y,m){
   return getPayDates(rec.startDate,rec.freq==="weekly"?7:14,y,m).length>0;
 }
 
+// ── SUBSCRIPTION DETECTOR ─────────────────────────────────────────
+function detectSubscriptions(monthData){
+  const allTxs=[];
+  Object.values(monthData).forEach(md=>(md.transactions||[]).forEach(t=>{
+    if(!t.isReimb&&t.merchant) allTxs.push(t);
+  }));
+  const byMerchant={};
+  allTxs.forEach(t=>{
+    const key=t.merchant.toLowerCase().trim();
+    if(!byMerchant[key]) byMerchant[key]=[];
+    byMerchant[key].push(t);
+  });
+  const detected=[];
+  Object.entries(byMerchant).forEach(([key,txs])=>{
+    if(txs.length<2) return;
+    const sorted=[...txs].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const intervals=[];
+    for(let i=1;i<sorted.length;i++){
+      intervals.push((new Date(sorted[i].date)-new Date(sorted[i-1].date))/86400000);
+    }
+    const avg=intervals.reduce((s,v)=>s+v,0)/intervals.length;
+    if(avg>400) return;
+    const intervalOk=intervals.every(d=>Math.abs(d-avg)<=10);
+    const amounts=sorted.map(t=>t.amount);
+    const avgAmt=amounts.reduce((s,v)=>s+v,0)/amounts.length;
+    const amountOk=amounts.every(a=>Math.abs(a-avgAmt)/(avgAmt||1)<=0.15);
+    if(!intervalOk||!amountOk) return;
+    const freq=avg<=10?"weekly":avg<=20?"biweekly":avg<=95?"monthly":"quarterly";
+    const mult={weekly:52,biweekly:26,monthly:12,quarterly:4}[freq];
+    const last=sorted[sorted.length-1]; const prev=sorted[sorted.length-2];
+    detected.push({
+      id:key, merchant:sorted[0].merchant, amount:last.amount, frequency:freq,
+      occurrences:sorted.length, cat:sorted[0].cat,
+      priceIncrease:last.amount>prev.amount*1.05,
+      priceIncreasePct:prev.amount>0?Math.round((last.amount-prev.amount)/prev.amount*100):0,
+      annualCost:last.amount*mult, lastDate:last.date,
+    });
+  });
+  return detected.sort((a,b)=>b.annualCost-a.annualCost);
+}
+
 // ── SPENDING INSIGHTS ─────────────────────────────────────────────
 function generateInsights(monthData, cats, budgets, vm, vy){
   const getMD=(y,m)=>monthData[`${y}-${String(m).padStart(2,"0")}`]||{income:0,bonus:0,transactions:[]};
@@ -558,12 +599,13 @@ export default function App(){
   const [importSelections, setImportSelections] = useState({});
   const [importSearch,     setImportSearch]     = useState("");
   const [syncing,          setSyncing]          = useState(false);
+  const [dismissedSubs,    setDismissedSubs]    = useState([]);
 
   // ── LOAD ──
   useEffect(()=>{
     async function load(){
       try {
-        const keys=["v3_md","v3_budgets","v3_goals","v3_settings","v3_cats","v3_recurring","v3_recurringSkips","v3_rollover"];
+        const keys=["v3_md","v3_budgets","v3_goals","v3_settings","v3_cats","v3_recurring","v3_recurringSkips","v3_rollover","v3_dismissed_subs"];
         const res=await Promise.all(keys.map(k=>storage.get(k).catch(()=>null)));
         if(res[0]) setMonthData(JSON.parse(res[0].value));
         if(res[1]) setBudgets(JSON.parse(res[1].value));
@@ -573,6 +615,7 @@ export default function App(){
         if(res[5]) setRecurring(JSON.parse(res[5].value));
         if(res[6]) setRecurringSkips(JSON.parse(res[6].value));
         if(res[7]) setRollover(JSON.parse(res[7].value));
+        if(res[8]) setDismissedSubs(JSON.parse(res[8].value));
       } catch(e){ console.error("Load error",e); }
       setLoaded(true);
     }
@@ -1303,6 +1346,52 @@ export default function App(){
             <div style={{fontSize:15,fontWeight:700}}>Recurring</div>
             <button style={S.btnS("#6366F1")} onClick={()=>setShowRecurForm(!showRecurForm)}>{showRecurForm?"✕ Cancel":"+ Add Recurring"}</button>
           </div>
+
+          {(()=>{
+            const detected=detectSubscriptions(monthData).filter(s=>!dismissedSubs.includes(s.id)&&!recurring.some(r=>r.name.toLowerCase()===s.merchant.toLowerCase()));
+            const alreadyTracked=detectSubscriptions(monthData).filter(s=>recurring.some(r=>r.name.toLowerCase()===s.merchant.toLowerCase()));
+            const monthlyTotal=detected.reduce((s,d)=>s+(d.frequency==="monthly"?d.amount:d.frequency==="weekly"?d.amount*4.33:d.frequency==="biweekly"?d.amount*2.17:d.amount/3),0);
+            return detected.length>0&&(
+              <div style={{...S.card,marginBottom:14,border:"1.5px solid #6366F144"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div>
+                    <div style={S.ptitle}>Auto-detected subscriptions ({detected.length})</div>
+                    <div style={{fontSize:11,color:"#64748B"}}>Based on your transaction history · Est. {c0(monthlyTotal)}/mo total</div>
+                  </div>
+                </div>
+                {detected.map(sub=>{
+                  const cc=catColor(cats,sub.cat); const cb=catBg(cats,sub.cat);
+                  return (
+                    <div key={sub.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F1F5F9",flexWrap:"wrap"}}>
+                      <div style={{width:36,height:36,borderRadius:9,background:cc+"1a",border:`1.5px solid ${cc}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:cc,flexShrink:0}}>
+                        {sub.merchant[0].toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:120}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <span style={{fontSize:13,fontWeight:600}}>{sub.merchant}</span>
+                          <Pill label={sub.frequency} color="#6366F1" bg="#EEF2FF"/>
+                          <Pill label={catLabel(cats,sub.cat)} color={cc} bg={cb}/>
+                          {sub.priceIncrease&&<Pill label={`↑${sub.priceIncreasePct}% price increase`} color="#A32D2D" bg="#FEF2F2"/>}
+                        </div>
+                        <div style={{fontSize:11,color:"#64748B",marginTop:2}}>{c2(sub.amount)}/occurrence · {c0(sub.annualCost)}/yr · {sub.occurrences} charges found</div>
+                      </div>
+                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                        <button style={S.btnS("#1D9E75")} onClick={()=>{
+                          const next=[...recurring,{id:Date.now(),name:sub.merchant,cat:sub.cat,amount:sub.amount,freq:sub.frequency,startDate:sub.lastDate}];
+                          setRecurring(next); save("v3_recurring",next);
+                          const nd=[...dismissedSubs,sub.id]; setDismissedSubs(nd); save("v3_dismissed_subs",nd);
+                        }}>+ Track</button>
+                        <button style={S.btn("#64748B")} onClick={()=>{
+                          const nd=[...dismissedSubs,sub.id]; setDismissedSubs(nd); save("v3_dismissed_subs",nd);
+                        }}>Dismiss</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {alreadyTracked.length>0&&<div style={{fontSize:10,color:"#94A3B8",marginTop:8}}>{alreadyTracked.length} already tracked: {alreadyTracked.map(s=>s.merchant).join(", ")}</div>}
+              </div>
+            );
+          })()}
 
           {showRecurForm&&(
             <div style={{...S.card,marginBottom:14,border:"1.5px solid #AFA9EC"}}>
