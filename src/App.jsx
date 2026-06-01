@@ -335,18 +335,32 @@ function makeStyles(dark, accent){
 let S = makeStyles(false,"#6366F1");
 
 // ── TOP-LEVEL COMPONENTS ──────────────────────────────────────────
-function MonthBar({vm,vy,monthData,setVm}){
-  const getMD=(y,m)=>monthData[mkKey(y,m)]||{income:0,bonus:0,transactions:[],rothBalance:0};
-  return (
-    <div style={S.mbar}>
-      {MONTHS.map((m,i)=>{
-        const md=getMD(vy,i); const has=(md.transactions||[]).length>0; const isNow=i===CUR_M&&vy===CUR_Y;
-        return (
-          <button key={i} style={S.mbtn(i===vm,has)} onClick={()=>setVm(i)}>
-            <div>{m}</div><div style={{fontSize:8}}>{isNow?"●":has?"·":""}</div>
-          </button>
-        );
-      })}
+function MonthBar({vm,vy,monthData,setVm,setVy}){
+  const hasTxs=(monthData[mkKey(vy,vm)]?.transactions||[]).length>0;
+  const isNow=vm===CUR_M&&vy===CUR_Y;
+  const goBack=()=>{
+    if(vm===0){setVm(11);setVy(y=>y-1);}else setVm(m=>m-1);
+  };
+  const goForward=()=>{
+    if(vm===11){setVm(0);setVy(y=>y+1);}else setVm(m=>m+1);
+  };
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,gap:8}}>
+      <button onClick={goBack}
+        style={{width:34,height:34,borderRadius:10,background:S.T.elevated,border:`1px solid ${S.T.border}`,color:S.T.muted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+        ‹
+      </button>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:15,fontWeight:700,color:S.T.text,letterSpacing:"-0.3px"}}>
+          {FULLMONTHS[vm]} {vy}
+          {isNow&&<span style={{marginLeft:6,fontSize:9,background:S.T.elevated,color:S.T.muted,borderRadius:10,padding:"2px 7px",fontWeight:600,verticalAlign:"middle"}}>current</span>}
+        </div>
+        {hasTxs&&<div style={{fontSize:10,color:S.T.subtle,marginTop:1}}>has transactions</div>}
+      </div>
+      <button onClick={goForward}
+        style={{width:34,height:34,borderRadius:10,background:S.T.elevated,border:`1px solid ${S.T.border}`,color:S.T.muted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+        ›
+      </button>
     </div>
   );
 }
@@ -1388,7 +1402,7 @@ export default function App(){
 
         {/* ══ OVERVIEW ══ */}
         {tab==="overview"&&(<>
-          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
+          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           {(()=>{
             const overBudget=cats.filter(cat=>{const sp=catSpend(cat.id);const eff=getEffBudget(cat.id,vy,vm);return eff>0&&sp>eff;});
             return overBudget.length>0&&(
@@ -1571,7 +1585,7 @@ export default function App(){
 
         {/* ══ TRANSACTIONS ══ */}
         {tab==="txns"&&(<>
-          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
+          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div>
               <div style={{fontSize:15,fontWeight:700}}>{FULLMONTHS[vm]} {vy}</div>
@@ -2092,7 +2106,7 @@ export default function App(){
 
         {/* ══ SPLITS ══ */}
         {tab==="splits"&&(<>
-          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
+          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Splits</div>
           <div style={S.g3}>
             <div style={S.kpi}><div style={S.klabel}>Pending</div><div style={S.kval("#1565C0")}>{c0(pendingTotal)}</div><div style={S.ksub}>friends still owe you</div></div>
@@ -2233,7 +2247,7 @@ export default function App(){
 
         {/* ══ ROTH IRA ══ */}
         {tab==="roth"&&(<>
-          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
+          <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Roth IRA</div>
           <div style={{fontSize:12,color:"#64748B",marginBottom:16}}>Auto-tracked from transactions · Add via Transactions tab with category "Roth IRA"</div>
           <div style={S.g3}>
