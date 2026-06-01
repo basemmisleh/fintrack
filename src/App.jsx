@@ -1963,122 +1963,176 @@ export default function App(){
             );
           })():(
           <>
+          {/* Topbar row */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:700}}>Accounts</div>
-              <div style={{fontSize:11,color:T.subtle,marginTop:2}}>Connect your bank accounts to automatically import transactions.</div>
+            <div/>
+            <div style={{display:"flex",gap:8}}>
+              <button style={S.btn("#6366F1")} onClick={loadBalances} disabled={loadingBalances}>{loadingBalances?"↻ Refreshing…":"↻ Refresh all"}</button>
+              <PlaidConnectButton onConnected={()=>loadConnections()}/>
             </div>
-            <PlaidConnectButton onConnected={()=>loadConnections()}/>
           </div>
 
-          {/* Accounts grouped view */}
           {(()=>{
             const groups=[
-              {key:"cash",    label:"Cash",        types:["depository"],             color:"#16A34A"},
-              {key:"credit",  label:"Credit Cards", types:["credit","loan"],          color:"#B91C1C"},
-              {key:"invest",  label:"Investments",  types:["investment","brokerage"], color:"#6366F1"},
+              {key:"credit",  label:"Credit Cards", types:["credit","loan"],            color:"#B91C1C"},
+              {key:"cash",    label:"Cash",          types:["depository"],               color:"#16A34A"},
+              {key:"invest",  label:"Investments",   types:["investment","brokerage"],   color:"#0EA5E9"},
             ];
-            const totalCash=plaidBalances.filter(a=>a.type==="depository").reduce((s,a)=>s+(a.balance||0),0);
-            const totalDebt=plaidBalances.filter(a=>a.type==="credit"||a.type==="loan").reduce((s,a)=>s+Math.abs(a.balance||0),0);
+            const totalCash  =plaidBalances.filter(a=>a.type==="depository").reduce((s,a)=>s+(a.balance||0),0);
+            const totalDebt  =plaidBalances.filter(a=>a.type==="credit"||a.type==="loan").reduce((s,a)=>s+Math.abs(a.balance||0),0);
             const totalInvest=plaidBalances.filter(a=>a.type==="investment"||a.type==="brokerage").reduce((s,a)=>s+(a.balance||0),0);
+            const assetsTotal=totalCash+totalInvest;
+            const nw=assetsTotal-totalDebt;
+            // Last synced per institution
+            const lastSyncedMap={};
+            connections.forEach(c=>{if(c.last_synced)lastSyncedMap[c.institution_name]=new Date(c.last_synced);});
+            const timeAgo=d=>{if(!d)return"Never synced";const m=Math.round((Date.now()-d)/60000);if(m<1)return"just now";if(m<60)return`${m} min ago`;if(m<1440)return`${Math.round(m/60)} hr ago`;return`${Math.round(m/1440)}d ago`;};
+
             return(<>
-              {/* Summary KPIs */}
-              {plaidBalances.length>0&&(
-                <div className="ft-g3" style={{...S.g3,marginBottom:16}}>
-                  {[
-                    {l:"Cash & Checking",v:c2(totalCash),   c:"#16A34A",s:`${plaidBalances.filter(a=>a.type==="depository").length} accounts`},
-                    {l:"Credit Card Debt",v:c2(totalDebt),  c:"#B91C1C",s:`${plaidBalances.filter(a=>a.type==="credit"||a.type==="loan").length} cards`},
-                    {l:"Investments",    v:c2(totalInvest), c:"#6366F1", s:`${plaidBalances.filter(a=>a.type==="investment"||a.type==="brokerage").length} accounts`},
-                  ].map((k,i)=>(
-                    <div key={i} className="ft-kpi-card" style={S.kpi}>
-                      <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:k.c,borderRadius:"18px 18px 0 0"}}/>
-                      <div style={{...S.klabel,marginTop:8}}>{k.l}</div>
-                      <div style={S.kval(k.c)}>{k.v}</div>
-                      <div style={S.ksub}>{k.s}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Grouped account rows */}
-              {plaidBalances.length>0&&groups.map(g=>{
-                const accounts=plaidBalances.filter(a=>g.types.includes(a.type));
-                if(!accounts.length) return null;
-                const groupTotal=accounts.reduce((s,a)=>s+Math.abs(a.balance||0),0);
-                const collapsed=collapsedGroups[g.key];
-                return(
-                  <div key={g.key} className="ft-card" style={{...S.card,marginBottom:12}}>
-                    <button onClick={()=>setCollapsedGroups(p=>({...p,[g.key]:!p[g.key]}))}
-                      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginBottom:collapsed?0:12}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:g.color,flexShrink:0}}/>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{g.label}</span>
-                        <span style={{fontSize:11,color:T.subtle}}>{accounts.length} account{accounts.length!==1?"s":""}</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <span style={{fontSize:14,fontWeight:700,color:g.key==="credit"?"#B91C1C":"#16A34A"}}>{c2(groupTotal)}</span>
-                        <span style={{fontSize:12,color:T.subtle,transform:collapsed?"rotate(-90deg)":"rotate(0deg)",display:"inline-block",transition:"transform 0.15s"}}>▾</span>
-                      </div>
-                    </button>
-                    {!collapsed&&accounts.map(a=>{
-                      const isCredit=a.type==="credit"||a.type==="loan";
-                      const bal=Math.abs(a.balance||0);
-                      return(
-                        <div key={a.id||a.mask} onClick={()=>setDrillAccount(a)}
-                          style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.borderSubtle}`,cursor:"pointer",borderRadius:6,transition:"background 0.1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.elevated}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <MerchantLogo merchant={a.institution||a.name} size={38} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{a.name}</div>
-                            <div style={{fontSize:11,color:T.subtle}}>{a.institution} · {a.subtype||a.type}{a.mask?` ···${a.mask}`:""}</div>
-                          </div>
-                          <div style={{textAlign:"right",flexShrink:0}}>
-                            <div style={{fontSize:14,fontWeight:700,color:isCredit?"#B91C1C":"#16A34A"}}>{c2(bal)}</div>
-                            <div style={{fontSize:9,color:T.subtle,marginTop:1}}>tap to view</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-
-              {/* Connect / Sync */}
+              {/* ── Net Worth chart ── */}
               <div className="ft-card" style={{...S.card,marginBottom:16}}>
-                <div style={{...S.ptitle,marginBottom:12}}>Connected banks</div>
-                {connections.length===0?(
-                  <div style={{textAlign:"center",padding:"24px 0",color:T.subtle,fontSize:13}}>
-                    No accounts connected yet.<br/>
-                    <div style={{marginTop:12}}><PlaidConnectButton onConnected={()=>loadConnections()}/></div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                  <div>
+                    <div style={{fontSize:10,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.8px",fontWeight:600}}>Net Worth</div>
+                    <div style={{fontSize:28,fontWeight:800,color:nw>=0?"#16A34A":"#B91C1C",letterSpacing:"-0.5px",fontFamily:"'Fira Code','IBM Plex Mono',monospace"}}>{c2(nw)}</div>
+                    <div style={{fontSize:11,color:T.subtle,marginTop:2}}>from connected accounts</div>
                   </div>
-                ):(
-                  <>
-                  {connections.map(conn=>(
-                    <div key={conn.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
-                      <MerchantLogo merchant={conn.institution_name} size={38} color="#6366F1" bg="#EEF2FF"/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{conn.institution_name}</div>
-                        <div style={{fontSize:10,color:T.subtle}}>
-                          Synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:6,flexShrink:0}}>
-                        <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
-                        <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
-                          style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
-                      </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button style={S.btn("#6366F1")} onClick={syncTransactions} disabled={syncing}>{syncing?"↻ Syncing…":"↻ Sync Now"}</button>
+                  </div>
+                </div>
+                {/* Sparkline from networthSnapshots */}
+                {networthSnapshots.length>=2&&(()=>{
+                  const snaps=networthSnapshots.slice(-12);
+                  const vals=snaps.map(s=>s.netWorth);
+                  const maxV=Math.max(...vals); const minV=Math.min(...vals);
+                  const range=maxV-minV||1; const H=64; const W=400;
+                  const px=i=>i*(W/Math.max(snaps.length-1,1));
+                  const py=v=>H-((v-minV)/range)*H;
+                  const pts=snaps.map((s,i)=>`${px(i)},${py(s.netWorth)}`).join(" ");
+                  const areaPts=`${px(0)},${H} ${pts} ${px(snaps.length-1)},${H}`;
+                  const lc=vals[vals.length-1]>=0?"#16A34A":"#B91C1C";
+                  return(
+                    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",marginTop:8}}>
+                      <defs><linearGradient id="acctNwGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={lc} stopOpacity="0.15"/><stop offset="100%" stopColor={lc} stopOpacity="0"/></linearGradient></defs>
+                      <polygon points={areaPts} fill="url(#acctNwGrad)"/>
+                      <polyline points={pts} fill="none" stroke={lc} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+                      <circle cx={px(snaps.length-1)} cy={py(vals[vals.length-1])} r="3" fill={lc}/>
+                    </svg>
+                  );
+                })()}
+              </div>
+
+              {/* ── 2-column: groups left, summary right ── */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:16,alignItems:"start"}}>
+                {/* LEFT: grouped accounts */}
+                <div>
+                  {plaidBalances.length===0?(
+                    <div className="ft-card" style={{...S.card,textAlign:"center",padding:"40px 20px",color:T.subtle}}>
+                      <div style={{fontSize:32,marginBottom:12}}>🏦</div>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:6}}>No accounts connected</div>
+                      <div style={{fontSize:12,marginBottom:16}}>Connect Chase, Amex, or Robinhood to see your balances here.</div>
+                      <PlaidConnectButton onConnected={()=>loadConnections()}/>
                     </div>
-                  ))}
-                  <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-                    <button style={S.btnS("#6366F1")} onClick={syncTransactions} disabled={syncing}>
-                      {syncing?"↻ Syncing…":"↻ Sync Now"}
-                    </button>
-                    <PlaidConnectButton onConnected={()=>loadConnections()}/>
-                    {syncing&&<div style={{fontSize:11,color:"#6366F1"}}>Fetching from Plaid…</div>}
+                  ):groups.map(g=>{
+                    const accounts=plaidBalances.filter(a=>g.types.includes(a.type));
+                    if(!accounts.length) return null;
+                    const groupTotal=accounts.reduce((s,a)=>s+Math.abs(a.balance||0),0);
+                    const collapsed=collapsedGroups[g.key];
+                    return(
+                      <div key={g.key} className="ft-card" style={{...S.card,marginBottom:12,padding:0,overflow:"hidden"}}>
+                        {/* Group header */}
+                        <button onClick={()=>setCollapsedGroups(p=>({...p,[g.key]:!p[g.key]}))}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"14px 20px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",borderBottom:collapsed?"none":`1px solid ${T.border}`}}>
+                          <span style={{fontSize:13,color:T.muted,fontWeight:500,transform:collapsed?"rotate(-90deg)":"rotate(0deg)",display:"inline-block",transition:"transform 0.15s",lineHeight:1}}>▾</span>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:g.color,flexShrink:0}}/>
+                          <span style={{fontSize:14,fontWeight:700,color:T.text,flex:1,textAlign:"left"}}>{g.label}</span>
+                          <span style={{fontSize:11,color:T.subtle,marginRight:8}}>$0.00 · 1 month</span>
+                          <span style={{fontSize:15,fontWeight:700,color:T.text}}>{c2(groupTotal)}</span>
+                        </button>
+                        {!collapsed&&accounts.map((a,i)=>{
+                          const isCredit=a.type==="credit"||a.type==="loan";
+                          const bal=Math.abs(a.balance||0);
+                          const syncTime=timeAgo(lastSyncedMap[a.institution]);
+                          return(
+                            <div key={a.id||a.mask} onClick={()=>setDrillAccount(a)}
+                              style={{display:"flex",alignItems:"center",gap:14,padding:"14px 20px",borderBottom:i<accounts.length-1?`1px solid ${T.borderSubtle}`:"none",cursor:"pointer",transition:"background 0.12s"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.elevated}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <MerchantLogo merchant={a.institution||a.name} size={42} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:600,color:T.text}}>{a.name}</div>
+                                <div style={{fontSize:11,color:T.subtle,marginTop:1}}>{a.subtype||a.type}</div>
+                              </div>
+                              <div style={{textAlign:"right",flexShrink:0}}>
+                                <div style={{fontSize:14,fontWeight:700,color:isCredit?"#B91C1C":T.text}}>{c2(bal)}</div>
+                                <div style={{fontSize:10,color:T.subtle,marginTop:1}}>{syncTime}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {/* Connected banks / manage */}
+                  {connections.length>0&&(
+                    <div className="ft-card" style={{...S.card,marginTop:8}}>
+                      <div style={{...S.ptitle,marginBottom:10}}>Manage connections</div>
+                      {connections.map(conn=>(
+                        <div key={conn.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                          <MerchantLogo merchant={conn.institution_name} size={32} color="#6366F1" bg="#EEF2FF"/>
+                          <div style={{flex:1,fontSize:12,fontWeight:600,color:T.text}}>{conn.institution_name}</div>
+                          <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)} style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT: Summary panel */}
+                <div className="ft-card" style={{...S.card,position:"sticky",top:70}}>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:16}}>Summary</div>
+                  {/* Assets */}
+                  <div style={{marginBottom:16}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text}}>Assets</span>
+                      <span style={{fontSize:12,fontWeight:700,color:T.text}}>{c2(assetsTotal)}</span>
+                    </div>
+                    <div style={{height:6,borderRadius:6,background:T.elevated,overflow:"hidden",marginBottom:10}}>
+                      <div style={{height:"100%",width:`${assetsTotal>0?100:0}%`,background:"linear-gradient(90deg,#0EA5E9,#16A34A)",borderRadius:6}}/>
+                    </div>
+                    {[
+                      {l:"Investments",v:totalInvest,c:"#0EA5E9"},
+                      {l:"Cash",       v:totalCash,  c:"#16A34A"},
+                    ].map(r=>(
+                      <div key={r.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:r.c}}/>
+                          <span style={{fontSize:12,color:T.text}}>{r.l}</span>
+                        </div>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{c2(r.v)}</span>
+                      </div>
+                    ))}
                   </div>
-                  </>
-                )}
+                  <div style={{height:1,background:T.border,marginBottom:16}}/>
+                  {/* Liabilities */}
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text}}>Liabilities</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"#B91C1C"}}>{c2(totalDebt)}</span>
+                    </div>
+                    <div style={{height:6,borderRadius:6,background:T.elevated,overflow:"hidden",marginBottom:10}}>
+                      <div style={{height:"100%",width:`${totalDebt>0?100:0}%`,background:"#B91C1C",borderRadius:6}}/>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:"#B91C1C"}}/>
+                        <span style={{fontSize:12,color:T.text}}>Credit Cards</span>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text}}>{c2(totalDebt)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </>);
           })()}
