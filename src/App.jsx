@@ -68,6 +68,48 @@ function isRecurringDue(rec,y,m){
   return getPayDates(rec.startDate,rec.freq==="weekly"?7:14,y,m).length>0;
 }
 
+// ── SPENDING INSIGHTS ─────────────────────────────────────────────
+function generateInsights(monthData, cats, budgets, vm, vy){
+  const getMD=(y,m)=>monthData[`${y}-${String(m).padStart(2,"0")}`]||{income:0,bonus:0,transactions:[]};
+  const catSpend=(y,m,id)=>(getMD(y,m).transactions||[]).filter(t=>t.cat===id&&!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+  const insights=[];
+
+  // Per-category vs 3-month rolling average
+  cats.forEach(cat=>{
+    const cur=catSpend(vy,vm,cat.id);
+    if(cur===0) return;
+    const prevAmts=[1,2,3].map(n=>{
+      const pm=vm-n<0?vm-n+12:vm-n; const py=vm-n<0?vy-1:vy;
+      return catSpend(py,pm,cat.id);
+    }).filter(v=>v>0);
+    if(prevAmts.length<2) return;
+    const avg=prevAmts.reduce((s,v)=>s+v,0)/prevAmts.length;
+    const pct=avg>0?(cur-avg)/avg:0;
+    if(pct>0.25) insights.push({icon:"↑",color:"#A32D2D",bg:"#FEF2F2",text:`${cat.label} is ${Math.round(pct*100)}% above your 3-month average (avg ${c0(avg)}/mo)`});
+    else if(pct<-0.2) insights.push({icon:"↓",color:"#1D9E75",bg:"#F0FDF4",text:`${cat.label} is ${Math.round(Math.abs(pct)*100)}% below your 3-month average — nice restraint`});
+  });
+
+  // Savings rate
+  const curMD=getMD(vy,vm);
+  const income=(curMD.income||0)+(curMD.bonus||0);
+  const spent=cats.reduce((s,cat)=>s+catSpend(vy,vm,cat.id),0);
+  if(income>0){
+    const rate=(income-spent)/income;
+    if(rate>=0.2) insights.push({icon:"✓",color:"#1D9E75",bg:"#F0FDF4",text:`On track to save ${Math.round(rate*100)}% this month — above your 20% target`});
+    else if(spent>0) insights.push({icon:"!",color:"#BA7517",bg:"#FFFBEB",text:`Savings rate is ${Math.round(Math.max(0,rate)*100)}% — ${c0(income*0.2-(income-spent))} more to save to hit 20%`});
+  }
+
+  // Subscription total
+  const subSpend=catSpend(vy,vm,"subs");
+  if(subSpend>0) insights.push({icon:"↺",color:"#6366F1",bg:"#EEF2FF",text:`Subscriptions: ${c0(subSpend)}/mo · ${c0(subSpend*12)}/yr`});
+
+  // Largest single category
+  const top=[...cats].sort((a,b)=>catSpend(vy,vm,b.id)-catSpend(vy,vm,a.id)).find(c=>catSpend(vy,vm,c.id)>0);
+  if(top&&insights.length<5) insights.push({icon:"▶",color:"#64748B",bg:"#F8FAFC",text:`Biggest spend: ${top.label} at ${c0(catSpend(vy,vm,top.id))} — ${spent>0?Math.round(catSpend(vy,vm,top.id)/spent*100):0}% of total`});
+
+  return insights.slice(0,5);
+}
+
 // ── MINI COMPONENTS ───────────────────────────────────────────────
 function Bar({val,max,color,h=7}){
   const w=max>0?Math.min(100,(val/max)*100):0;
@@ -1001,6 +1043,19 @@ export default function App(){
               </div>
             ))}
           </div>
+          {(()=>{const insights=generateInsights(monthData,cats,budgets,vm,vy);return insights.length>0&&(
+            <div style={{...S.card,marginBottom:16}}>
+              <div style={S.ptitle}>Insights — {MONTHS[vm]}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {insights.map((ins,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 12px",background:ins.bg,borderRadius:8,border:`1px solid ${ins.color}22`}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:ins.color+"20",border:`1.5px solid ${ins.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:ins.color,fontWeight:700,flexShrink:0}}>{ins.icon}</div>
+                    <span style={{fontSize:12,color:"#0F172A",lineHeight:1.5}}>{ins.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );})()}
           {drillCat&&(
             <div style={{...S.card,marginBottom:16,border:"1.5px solid #AFA9EC"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
