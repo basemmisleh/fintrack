@@ -682,6 +682,27 @@ export default function App(){
   };
 
   // ── PLAID ──
+  const unlinkConnection = async (connectionId, institutionName) => {
+    if (!window.confirm(`Unlink ${institutionName}? This will remove the connection and stop syncing.`)) return;
+    try {
+      const res = await fetch(`${FUNC_BASE}/plaid-remove-item`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connection_id: connectionId }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      loadConnections();
+    } catch(e) { console.error("Unlink error:", e); alert("Failed to unlink: " + e.message); }
+  };
+
+  const clearAllData = () => {
+    if (!window.confirm("Clear ALL transaction data? This cannot be undone.")) return;
+    const next = {};
+    setMonthData(next);
+    save("v3_md", next);
+  };
+
   const loadConnections = useCallback(async () => {
     try {
       const res  = await fetch(`${FUNC_BASE}/plaid-get-connections`, { method: "POST" });
@@ -851,6 +872,13 @@ export default function App(){
                   </div>
                 ))}
               </div>
+            </div>
+            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16,marginTop:4}}>
+              <div style={S.ptitle}>Danger zone</div>
+              <button style={{...S.btn("#E24B4A"),fontSize:12}} onClick={clearAllData}>
+                🗑 Clear all transaction data
+              </button>
+              <div style={{fontSize:10,color:"#94A3B8",marginTop:6}}>Removes all transactions across all months. Settings, budgets, and categories are kept.</div>
             </div>
           </div>
         )}
@@ -1039,7 +1067,11 @@ export default function App(){
                       Last synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
                     </div>
                   </div>
-                  <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                    <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
+                    <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
+                      style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
+                  </div>
                 </div>
               ))}
               <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center"}}>
