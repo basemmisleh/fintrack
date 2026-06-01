@@ -723,12 +723,15 @@ export default function App(){
       Object.values(monthData).forEach(md => (md.transactions||[]).forEach(t => { if (t.plaid_id) imported.add(t.plaid_id); }));
       const fresh = (data.transactions||[]).filter(t => !imported.has(t.plaid_id));
 
+      if (data.skipped?.length) {
+        alert(`${data.skipped.join(", ")}: still loading initial transactions. Plaid needs a few minutes on first connect. Try again shortly.`);
+      }
       setSyncedTxs(fresh);
       const sel = {};
       fresh.forEach(t => { sel[t.plaid_id] = true; });
       setImportSelections(sel);
       loadConnections();
-    } catch(e) { console.error("Sync error:", e); }
+    } catch(e) { console.error("Sync error:", e); alert("Sync failed: " + e.message); }
     finally { setSyncing(false); }
   };
 
