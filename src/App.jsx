@@ -346,6 +346,31 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
                 <input type="text" style={S.input} placeholder="Note (optional)" value={editTxForm.note}
                   onChange={e=>setEditTxForm({...editTxForm,note:e.target.value})}/>
               </div>
+              <div style={{marginBottom:10,padding:"10px 12px",background:"#F8FAFC",borderRadius:8,border:"1px solid #E2E8F0"}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,fontWeight:600,color:"#1565C0"}}>
+                  <input type="checkbox" checked={!!editTxForm.isSplit}
+                    onChange={e=>setEditTxForm({...editTxForm,isSplit:e.target.checked,splitCount:2,cat:e.target.checked?"split":editTxForm.cat})}/>
+                  Split this expense — I paid for others
+                </label>
+                {editTxForm.isSplit&&(
+                  <div style={{marginTop:10,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    <span style={{fontSize:12,color:"#64748B"}}>Split how many ways?</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <button type="button" onClick={()=>setEditTxForm({...editTxForm,splitCount:Math.max(2,editTxForm.splitCount-1)})}
+                        style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #1565C0",background:"#FFF",color:"#1565C0",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                      <span style={{fontSize:20,fontWeight:700,minWidth:24,textAlign:"center"}}>{editTxForm.splitCount}</span>
+                      <button type="button" onClick={()=>setEditTxForm({...editTxForm,splitCount:editTxForm.splitCount+1})}
+                        style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #1565C0",background:"#1565C0",color:"#FFF",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    </div>
+                    {parseFloat(editTxForm.amount)>0&&(
+                      <div style={{background:"#E1F5EE",border:"1px solid #5DCAA5",borderRadius:8,padding:"4px 12px",fontSize:12}}>
+                        Your share: <strong>{c2((parseFloat(editTxForm.amount)||0)/editTxForm.splitCount)}</strong>
+                        <span style={{color:"#64748B",marginLeft:6}}>of {c2(parseFloat(editTxForm.amount)||0)} total</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div style={{display:"flex",gap:8}}>
                 <button style={S.btnS("#6366F1")} onClick={()=>saveTx(tx.id)}>Save</button>
                 <button style={S.btn("#64748B")} onClick={()=>startEditTx(null)}>Cancel</button>
@@ -637,15 +662,30 @@ export default function App(){
   const startEditTx=tx=>{
     if(!tx){setEditTxId(null);setEditTxForm(null);return;}
     setEditTxId(tx.id);
-    setEditTxForm({date:tx.date,merchant:tx.merchant,cat:tx.cat,amount:String(tx.amount),note:tx.note||""});
+    const ways=tx.isSplit?(tx.splitWith?.length||1)+1:2;
+    setEditTxForm({
+      date:tx.date, merchant:tx.merchant, cat:tx.cat,
+      amount:String(tx.isSplit?tx.totalBill||tx.amount:tx.amount),
+      note:tx.note||"", isSplit:tx.isSplit||false,
+      splitCount:ways,
+    });
   };
 
   const saveTx=id=>{
     if(!editTxForm) return;
+    const total=parseFloat(editTxForm.amount)||0;
+    const myShare=editTxForm.isSplit?total/editTxForm.splitCount:total;
     const key=mkKey(vy,vm); const ex=monthData[key]||{};
     const txs=(ex.transactions||[]).map(t=>t.id!==id?t:{...t,
-      date:editTxForm.date,merchant:editTxForm.merchant,cat:editTxForm.cat,
-      amount:parseFloat(editTxForm.amount)||0,note:editTxForm.note});
+      date:editTxForm.date, merchant:editTxForm.merchant, cat:editTxForm.cat,
+      amount:myShare, note:editTxForm.note,
+      isSplit:editTxForm.isSplit,
+      totalBill:editTxForm.isSplit?total:0,
+      splitWith:editTxForm.isSplit
+        ?Array.from({length:editTxForm.splitCount-1},(_,i)=>
+            (t.splitWith?.[i]||{name:`Person ${i+1}`,paid:false,owes:myShare}))
+        :[],
+    });
     const next={...monthData,[key]:{...ex,transactions:txs}};
     setMonthData(next); save("v3_md",next);
     setEditTxId(null); setEditTxForm(null);
@@ -1120,7 +1160,11 @@ export default function App(){
                         <div style={{fontSize:12,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant}</div>
                         <div style={{fontSize:10,color:"#64748B"}}>{fmtD(t.date)} · {t.institution}</div>
                       </div>
-                      <Pill label={catLabel(cats,t.category)} color={cc} bg={cb}/>
+                      <select value={t.category}
+                        onChange={e=>setSyncedTxs(prev=>prev.map(tx=>tx.plaid_id===t.plaid_id?{...tx,category:e.target.value}:tx))}
+                        style={{...S.sel,width:120,fontSize:11,padding:"4px 8px",flexShrink:0}}>
+                        {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
                       <div style={{fontSize:13,fontWeight:700,flexShrink:0,minWidth:60,textAlign:"right"}}>{c2(t.amount)}</div>
                     </div>
                   );
