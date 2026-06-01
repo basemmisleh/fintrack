@@ -667,6 +667,7 @@ export default function App(){
   const [bulkMode,        setBulkMode]        = useState(false);
   const [bulkSelected,    setBulkSelected]    = useState(new Set());
   const [bulkCat,         setBulkCat]         = useState("dining");
+  const [undoStack,       setUndoStack]       = useState(null);
   const [showQuickAdd,    setShowQuickAdd]     = useState(false);
   const [quickForm,       setQuickForm]        = useState({merchant:"",amount:"",cat:"dining"});
   const [showRecurForm,   setShowRecurForm]    = useState(false);
@@ -845,8 +846,23 @@ export default function App(){
   const delTx=(id,merchant)=>{
     if(!window.confirm(`Delete "${merchant||"this transaction"}"?`)) return;
     const key=mkKey(vy,vm); const ex=monthData[key]||{};
+    const tx=(ex.transactions||[]).find(t=>t.id===id);
     const next={...monthData,[key]:{...ex,transactions:(ex.transactions||[]).filter(t=>t.id!==id)}};
     setMonthData(next); save("v3_md",next);
+    if(tx){
+      if(undoStack?.timeout) clearTimeout(undoStack.timeout);
+      const timeout=setTimeout(()=>setUndoStack(null),6000);
+      setUndoStack({tx,key,timeout});
+    }
+  };
+
+  const undoDelete=()=>{
+    if(!undoStack) return;
+    clearTimeout(undoStack.timeout);
+    const ex=monthData[undoStack.key]||{};
+    const next={...monthData,[undoStack.key]:{...ex,transactions:[...(ex.transactions||[]),undoStack.tx]}};
+    setMonthData(next); save("v3_md",next);
+    setUndoStack(null);
   };
 
   const startEditTx=tx=>{
@@ -2214,6 +2230,20 @@ export default function App(){
         style={{position:"fixed",bottom:20,right:20,zIndex:100,width:54,height:54,borderRadius:"50%",background:"linear-gradient(135deg,#6366F1,#8B5CF6)",color:"#FFF",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(99,102,241,0.5)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,transition:"transform 0.15s",transform:showQuickAdd?"rotate(45deg)":"rotate(0deg)"}}>
         +
       </button>
+
+      {/* ── UNDO TOAST ── */}
+      {undoStack&&(
+        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#1E293B",color:"#FFF",borderRadius:14,padding:"12px 18px",display:"flex",alignItems:"center",gap:14,zIndex:300,boxShadow:"0 8px 32px rgba(0,0,0,0.25)",fontSize:13,whiteSpace:"nowrap",animation:"fadeUp 0.2s ease"}}>
+          <span style={{color:"#94A3B8"}}>Deleted</span>
+          <span style={{fontWeight:600}}>{undoStack.tx.merchant}</span>
+          <button onClick={undoDelete}
+            style={{background:"#6366F1",border:"none",color:"#FFF",borderRadius:8,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            Undo
+          </button>
+          <button onClick={()=>{clearTimeout(undoStack.timeout);setUndoStack(null);}}
+            style={{background:"none",border:"none",color:"#64748B",cursor:"pointer",fontSize:18,lineHeight:1,padding:0}}>×</button>
+        </div>
+      )}
     </div>
   );
 }
