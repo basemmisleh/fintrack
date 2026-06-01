@@ -1423,8 +1423,20 @@ export default function App(){
         {tab==="txns"&&(<>
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:15,fontWeight:700}}>{FULLMONTHS[vm]}</div>
+            <div>
+              <div style={{fontSize:15,fontWeight:700}}>{FULLMONTHS[vm]} {vy}</div>
+              <div style={{fontSize:11,color:"#94A3B8"}}>{txList.length} transaction{txList.length!==1?"s":""}</div>
+            </div>
             <div style={{display:"flex",gap:8}}>
+              {!bulkMode&&!showTxForm&&txList.length>0&&(
+                <button style={{...S.btn("#E24B4A"),fontSize:11,padding:"5px 10px"}}
+                  onClick={()=>{
+                    if(!window.confirm(`Wipe all data for ${FULLMONTHS[vm]} ${vy}? This removes all transactions and income. Cannot be undone.`)) return;
+                    const key=mkKey(vy,vm);
+                    const next={...monthData,[key]:{income:0,bonus:0,transactions:[],rothBalance:0}};
+                    setMonthData(next); save("v3_md",next);
+                  }}>🗑 Wipe month</button>
+              )}
               <button style={bulkMode?S.btnS("#6366F1"):S.btn("#6366F1")} onClick={()=>{setBulkMode(v=>!v);setBulkSelected(new Set());}}>
                 {bulkMode?"✕ Cancel select":"⊡ Select"}
               </button>
