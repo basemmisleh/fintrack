@@ -766,6 +766,7 @@ export default function App(){
   const [quickForm,       setQuickForm]        = useState({merchant:"",amount:"",cat:"dining"});
   const [showRecurForm,   setShowRecurForm]    = useState(false);
   const [recurForm,       setRecurForm]        = useState({name:"",cat:"subs",amount:"",freq:"monthly",startDate:now.toISOString().split("T")[0]});
+  const [sidebarOpen,     setSidebarOpen]      = useState(()=>{ try{ return localStorage.getItem("ft_sidebar")!=="0"; }catch(e){ return true; } });
 
   // Plaid state
   const [connections,      setConnections]      = useState([]);
@@ -1181,8 +1182,11 @@ export default function App(){
           .ft-fab{bottom:88px!important;}
         }
         .ft-bottom-nav{display:none;}
+        .ft-sidebar{transition:transform 0.22s cubic-bezier(0.4,0,0.2,1),box-shadow 0.22s!important;}
+        .ft-main{transition:margin-left 0.22s cubic-bezier(0.4,0,0.2,1)!important;}
         .ft-nav-btn:hover{background:${T.elevated}!important;}
         .ft-bnav-btn:hover{opacity:0.75;}
+        .ft-toggle-btn:hover{background:${T.elevated}!important;}
         .ft-kpi-card{transition:transform 0.18s,box-shadow 0.18s!important;}
         .ft-kpi-card:hover{transform:translateY(-2px);box-shadow:${dark?"0 8px 28px rgba(0,0,0,0.5)":"0 8px 24px rgba(15,23,42,0.12)"}!important;}
         .ft-card{transition:box-shadow 0.18s!important;}
@@ -1192,7 +1196,7 @@ export default function App(){
       `}</style>
 
       {/* ── SIDEBAR ── */}
-      <div className="ft-sidebar" style={{width:224,position:"fixed",left:0,top:0,bottom:0,background:dark?T.surface:`linear-gradient(180deg,#FFFFFF 0%,#F8FAFC 100%)`,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:40,boxShadow:dark?"none":"2px 0 16px rgba(12,21,36,0.06)"}}>
+      <div className="ft-sidebar" style={{width:224,position:"fixed",left:0,top:0,bottom:0,background:dark?T.surface:`linear-gradient(180deg,#FFFFFF 0%,#F8FAFC 100%)`,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:40,boxShadow:dark?"none":"2px 0 16px rgba(12,21,36,0.06)",transform:sidebarOpen?"translateX(0)":"translateX(-100%)"}}>
         {/* Logo */}
         <div style={{padding:"22px 20px 16px",borderBottom:`1px solid ${T.border}`}}>
           <div style={{...S.logo,fontSize:19,backgroundImage:`linear-gradient(135deg,${A} 0%,${A}cc 100%)`}}>fintrack</div>
@@ -1204,8 +1208,8 @@ export default function App(){
             const active=tab===item.id&&!drillCat&&!showSettings;
             return(
               <button key={item.id} className="ft-nav-btn" onClick={()=>navGo(item.id)}
-                style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px 9px 11px",borderRadius:9,border:"none",borderLeft:`3px solid ${active?A:"transparent"}`,background:active?A+"18":"transparent",color:active?A:T.muted,cursor:"pointer",fontSize:13,fontWeight:active?600:450,fontFamily:"inherit",marginBottom:2,textAlign:"left",transition:"all 0.12s"}}>
-                <Ic paths={item.paths}/>
+                style={{width:"100%",display:"flex",alignItems:"center",gap:11,padding:"10px 12px 10px 11px",borderRadius:9,border:"none",borderLeft:`3px solid ${active?A:"transparent"}`,background:active?A+"18":"transparent",color:active?A:T.muted,cursor:"pointer",fontSize:13,fontWeight:active?600:450,fontFamily:"inherit",marginBottom:2,textAlign:"left",transition:"all 0.12s"}}>
+                <Ic paths={item.paths} size={18}/>
                 <span style={{flex:1}}>{item.label}</span>
                 {item.id==="recurring"&&recurringBadgeCount>0&&<span style={{background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700,lineHeight:1.4}}>{recurringBadgeCount}</span>}
               </button>
@@ -1232,10 +1236,16 @@ export default function App(){
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div className="ft-main" style={{flex:1,marginLeft:224,minWidth:0,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+      <div className="ft-main" style={{flex:1,marginLeft:sidebarOpen?224:0,minWidth:0,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
         {/* Minimal topbar */}
         <div style={{...S.topbar,boxShadow:"none",borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button className="ft-toggle-btn" onClick={()=>{const next=!sidebarOpen;setSidebarOpen(next);try{localStorage.setItem("ft_sidebar",next?"1":"0");}catch(e){}}}
+              style={{width:34,height:34,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,flexShrink:0}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
             {drillCat?(
               <>
                 <button onClick={()=>{setDrillCat(null);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
