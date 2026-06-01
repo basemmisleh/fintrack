@@ -68,6 +68,48 @@ function isRecurringDue(rec,y,m){
   return getPayDates(rec.startDate,rec.freq==="weekly"?7:14,y,m).length>0;
 }
 
+// ── UPCOMING PAYMENTS ────────────────────────────────────────────
+function getUpcomingPayments(recurring, monthData, windowDays=14){
+  const today=new Date(); today.setHours(0,0,0,0);
+  const end=new Date(today); end.setDate(today.getDate()+windowDays);
+  const mkKey=(y,m)=>`${y}-${String(m+1).padStart(2,"0")}`;
+  const isConfirmed=(rec,date)=>{
+    const key=mkKey(date.getFullYear(),date.getMonth());
+    const txs=(monthData[key]||{}).transactions||[];
+    return txs.some(t=>t.recurringId===rec.id);
+  };
+  const upcoming=[];
+  recurring.forEach(rec=>{
+    if(!rec.startDate) return;
+    const startDay=parseInt(rec.startDate.split("-")[2]||"1");
+    if(rec.freq==="monthly"||rec.freq==="biweekly"||rec.freq==="weekly"){
+      const cycle=rec.freq==="weekly"?7:rec.freq==="biweekly"?14:0;
+      if(cycle>0){
+        // weekly/biweekly: walk from startDate
+        const start=new Date(rec.startDate+"T12:00:00");
+        let cur=new Date(start);
+        while(cur<=end){
+          if(cur>today&&!isConfirmed(rec,cur)){
+            upcoming.push({...rec,dueDate:new Date(cur),daysAway:Math.round((cur-today)/86400000)});
+            break;
+          }
+          cur.setDate(cur.getDate()+cycle);
+        }
+      } else {
+        // monthly: check same day in current and next month
+        for(let mo=0;mo<=2;mo++){
+          const d=new Date(today.getFullYear(),today.getMonth()+mo,startDay);
+          if(d>today&&d<=end&&!isConfirmed(rec,d)){
+            upcoming.push({...rec,dueDate:d,daysAway:Math.round((d-today)/86400000)});
+            break;
+          }
+        }
+      }
+    }
+  });
+  return upcoming.sort((a,b)=>a.dueDate-b.dueDate);
+}
+
 // ── SUBSCRIPTION DETECTOR ─────────────────────────────────────────
 function detectSubscriptions(monthData){
   const allTxs=[];
@@ -1381,6 +1423,38 @@ export default function App(){
               </div>
             ))}
           </div>
+          {(()=>{
+            const upcoming=getUpcomingPayments(recurring,monthData);
+            return upcoming.length>0&&(
+              <div style={{...S.card,marginBottom:16,border:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={S.ptitle}>Upcoming in the next 14 days</div>
+                  <span style={{fontSize:11,color:T.muted}}>{c0(upcoming.reduce((s,u)=>s+u.amount,0))} due</span>
+                </div>
+                {upcoming.map((u,i)=>{
+                  const cc=catColor(cats,u.cat); const isUrgent=u.daysAway<=3;
+                  const dateStr=u.dueDate.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+                  return(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.borderSubtle}`:"none"}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:cc+"20",border:`1.5px solid ${cc}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:cc,flexShrink:0}}>
+                        {u.name[0].toUpperCase()}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{u.name}</div>
+                        <div style={{fontSize:11,color:T.muted}}>{dateStr} · {catLabel(cats,u.cat)}</div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{c2(u.amount)}</div>
+                        <div style={{fontSize:10,fontWeight:600,color:isUrgent?"#E24B4A":"#F59E0B",marginTop:1}}>
+                          {u.daysAway===0?"today":u.daysAway===1?"tomorrow":`in ${u.daysAway} days`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {(()=>{const insights=generateInsights(monthData,cats,budgets,vm,vy);return insights.length>0&&(
             <div style={{...S.card,marginBottom:16}}>
               <div style={S.ptitle}>Insights — {MONTHS[vm]}</div>
