@@ -305,7 +305,7 @@ function makeStyles(dark, accent){
   const T=dark?DARK:LIGHT; const A=accent||"#6366F1";
   return {
     T,
-    app:    {minHeight:"100vh",background:T.bg,fontFamily:"'IBM Plex Sans','DM Sans','Inter',sans-serif",fontSize:13,color:T.text,transition:"background 0.3s,color 0.3s"},
+    app:    {minHeight:"100vh",background:T.bg,fontFamily:"'IBM Plex Sans','DM Sans','Inter',sans-serif",fontSize:13,color:T.text,transition:"background 0.3s,color 0.3s",display:"flex"},
     topbar: {background:T.navBg,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:30,boxShadow:T.shadow},
     logo:   {fontSize:17,fontWeight:800,background:`linear-gradient(135deg,${A} 0%,${A}cc 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",letterSpacing:"-0.5px"},
     nav:    {display:"flex",gap:0,overflowX:"auto",background:T.surface,borderBottom:`1px solid ${T.border}`},
@@ -333,6 +333,25 @@ function makeStyles(dark, accent){
 }
 // S is initialized with defaults; inside App it gets recomputed from settings
 let S = makeStyles(false,"#6366F1");
+
+// ── ICONS ─────────────────────────────────────────────────────────
+const Ic=({paths,size=16})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+    {paths.map((p,i)=><path key={i} d={p}/>)}
+  </svg>
+);
+const NAV_ITEMS=[
+  {id:"overview", label:"Overview",    paths:["M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"]},
+  {id:"txns",     label:"Transactions",paths:["M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"]},
+  {id:"accounts", label:"Accounts",    paths:["M1 4h22v16H1zM1 10h22"]},
+  {id:"recurring",label:"Recurring",   paths:["M23 4v6h-6M1 20v-6h6M3.5 9A9 9 0 0 1 21 15M20.5 15A9 9 0 0 1 3 9"]},
+  {id:"networth", label:"Net Worth",   paths:["M23 6l-9.5 9.5-5-5L1 18","M17 6h6v6"]},
+  {id:"annual",   label:"Annual",      paths:["M8 2v4M16 2v4M3 8h18M5 4H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"]},
+  {id:"splits",   label:"Splits",      paths:["M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a9 9 0 0 0 9 9"]},
+  {id:"goals",    label:"Goals",       paths:["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z","M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z","M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"]},
+  {id:"roth",     label:"Roth IRA",    paths:["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"]},
+];
+const PAGE_TITLES={overview:"Overview",txns:"Transactions",accounts:"Accounts",recurring:"Recurring",networth:"Net Worth",annual:"Annual",splits:"Splits",goals:"Goals",roth:"Roth IRA"};
 
 // ── TOP-LEVEL COMPONENTS ──────────────────────────────────────────
 function MonthBar({vm,vy,monthData,setVm,setVy}){
@@ -1144,52 +1163,88 @@ export default function App(){
   if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${settings.accentColor||"#6366F1"},${settings.accentColor||"#6366F1"}cc)`,animation:"spin 1s linear infinite"}}/><span style={{color:T.muted,fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
 
   // ── RENDER ────────────────────────────────────────────────────
+  const A=settings.accentColor||"#6366F1";
+  const userInitials=(settings.userName||"").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)||"Me";
+  const navGo=(id)=>{setTab(id);setDrillCat(null);setShowSettings(false);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);};
+
   return (
     <div style={S.app}>
-      {/* TOPBAR */}
-      <div style={S.topbar}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          {(drillCat||showSettings)?(
-            <button onClick={()=>{setDrillCat(null);setShowSettings(false);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
-              style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:settings.accentColor||"#6366F1",fontWeight:700,fontSize:13,padding:0,fontFamily:"inherit"}}>
-              ← <span style={{...S.logo,backgroundImage:`linear-gradient(135deg,${settings.accentColor||"#6366F1"} 0%,${settings.accentColor||"#6366F1"}99 100%)`}}>fintrack</span>
-            </button>
-          ):(
-            <div style={{...S.logo,backgroundImage:`linear-gradient(135deg,${settings.accentColor||"#6366F1"} 0%,${settings.accentColor||"#8B5CF6"} 100%)`}}>fintrack</div>
-          )}
-          <div style={{width:1,height:14,background:"#E2E8F0"}}/>
-          {showSettings?(
-            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Settings</span>
-          ):drillCat?(
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat)}}/>
-              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{catLabel(cats,drillCat)}</span>
-              <span style={{fontSize:11,color:"#94A3B8"}}>{FULLMONTHS[vm]}</span>
-            </div>
-          ):(
-            <>
-              <div style={{fontSize:11,color:"#64748B"}}>{FULLMONTHS[vm]} {vy}</div>
-              {pendingTotal>0&&<div style={{fontSize:11,background:"#E3F2FD",color:"#1565C0",padding:"2px 8px",borderRadius:20,fontWeight:600,cursor:"pointer"}} onClick={()=>setTab("splits")}>💸 {c0(pendingTotal)}</div>}
-            </>
-          )}
+      <style>{`
+        @media(max-width:768px){
+          .ft-sidebar{display:none!important;}
+          .ft-main{margin-left:0!important;padding-bottom:68px!important;}
+          .ft-bottom-nav{display:flex!important;}
+          .ft-fab{bottom:88px!important;}
+        }
+        .ft-bottom-nav{display:none;}
+        .ft-nav-btn:hover{background:${T.elevated}!important;}
+        .ft-bnav-btn:hover{opacity:0.75;}
+      `}</style>
+
+      {/* ── SIDEBAR ── */}
+      <div className="ft-sidebar" style={{width:220,position:"fixed",left:0,top:0,bottom:0,background:T.surface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:40}}>
+        {/* Logo */}
+        <div style={{padding:"20px 20px 14px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{...S.logo,backgroundImage:`linear-gradient(135deg,${A} 0%,${A}cc 100%)`}}>fintrack</div>
+          <div style={{fontSize:10,color:T.subtle,marginTop:4}}>{FULLMONTHS[CUR_M]} {CUR_Y}</div>
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {!showSettings&&!drillCat&&<button style={{...S.btn("#64748B"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowSettings(true)}>⚙</button>}
-          {!showSettings&&!drillCat&&<button style={{...S.btn("#6366F1"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowExport(!showExport)}>↓</button>}
-          <div style={{fontSize:10,fontWeight:600,color:saving?"#10B981":"#CBD5E1",minWidth:40,transition:"color 0.4s",display:"flex",alignItems:"center",gap:4}}>{saving?<><span style={{width:6,height:6,borderRadius:"50%",background:"#10B981",display:"inline-block"}}/>saving</> :<><span style={{width:6,height:6,borderRadius:"50%",background:"#CBD5E1",display:"inline-block"}}/>saved</>}</div>
+        {/* Nav */}
+        <div style={{flex:1,padding:"8px",overflowY:"auto"}}>
+          {NAV_ITEMS.map(item=>{
+            const active=tab===item.id&&!drillCat&&!showSettings;
+            return(
+              <button key={item.id} className="ft-nav-btn" onClick={()=>navGo(item.id)}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px 9px 10px",borderRadius:8,border:"none",borderLeft:`3px solid ${active?A:"transparent"}`,background:active?A+"18":"transparent",color:active?A:T.muted,cursor:"pointer",fontSize:13,fontWeight:active?600:400,fontFamily:"inherit",marginBottom:1,textAlign:"left",transition:"all 0.12s"}}>
+                <Ic paths={item.paths}/>
+                <span style={{flex:1}}>{item.label}</span>
+                {item.id==="recurring"&&recurringBadgeCount>0&&<span style={{background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700}}>{recurringBadgeCount}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {/* User / Settings */}
+        <div style={{padding:"8px 8px 12px",borderTop:`1px solid ${T.border}`}}>
+          {pendingTotal>0&&(
+            <button onClick={()=>navGo("splits")}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderRadius:8,border:"none",background:"#E3F2FD22",color:"#1565C0",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,marginBottom:4,borderLeft:"3px solid #1565C0"}}>
+              💸 {c0(pendingTotal)} pending
+            </button>
+          )}
+          <button className="ft-nav-btn" onClick={()=>{setShowSettings(true);setDrillCat(null);}}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 12px 8px 10px",borderRadius:8,border:"none",borderLeft:`3px solid ${showSettings?A:"transparent"}`,background:showSettings?A+"18":"transparent",cursor:"pointer",fontFamily:"inherit",transition:"all 0.12s"}}>
+            <div style={{width:30,height:30,borderRadius:9,background:`linear-gradient(135deg,${A},${A}cc)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#FFF",flexShrink:0}}>{userInitials}</div>
+            <div style={{textAlign:"left",minWidth:0,flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{settings.userName||"My Account"}</div>
+              <div style={{fontSize:10,color:T.subtle}}>Settings & profile</div>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* NAV */}
-      {!drillCat&&!showSettings&&<div style={{...S.nav,padding:"0 20px"}}>
-        <div style={S.nav}>
-          {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["networth","Net Worth"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
-            <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
-              {l}{id==="recurring"&&recurringBadgeCount>0&&<span style={{marginLeft:4,background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700,verticalAlign:"middle"}}>{recurringBadgeCount}</span>}
-            </button>
-          ))}
+      {/* ── MAIN CONTENT ── */}
+      <div className="ft-main" style={{flex:1,marginLeft:220,minWidth:0,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+        {/* Minimal topbar */}
+        <div style={{...S.topbar,boxShadow:"none",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {drillCat?(
+              <>
+                <button onClick={()=>{setDrillCat(null);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
+                  style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:20,padding:"0 2px",fontFamily:"inherit",lineHeight:1}}>←</button>
+                <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat),flexShrink:0}}/>
+                <span style={{fontSize:15,fontWeight:700,color:T.text}}>{catLabel(cats,drillCat)}</span>
+                <span style={{fontSize:11,color:T.muted}}>{FULLMONTHS[vm]}</span>
+              </>
+            ):(
+              <span style={{fontSize:15,fontWeight:700,color:T.text}}>{showSettings?"Settings":PAGE_TITLES[tab]||""}</span>
+            )}
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{fontSize:10,fontWeight:600,color:saving?"#10B981":T.subtle,display:"flex",alignItems:"center",gap:4,transition:"color 0.4s"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:saving?"#10B981":T.subtle,display:"inline-block",transition:"background 0.4s"}}/>
+              {saving?"saving":"saved"}
+            </div>
+          </div>
         </div>
-      </div>}
 
       <div style={S.body}>
 
@@ -2320,6 +2375,7 @@ export default function App(){
         </>} {/* end !drillCat && !showSettings */}
 
       </div>
+      </div> {/* end ft-main */}
 
       {/* ── QUICK ADD FLOATING BUTTON ── */}
       {showQuickAdd&&(
@@ -2342,10 +2398,38 @@ export default function App(){
           </div>
         </div>
       )}
-      <button onClick={()=>setShowQuickAdd(!showQuickAdd)}
-        style={{position:"fixed",bottom:20,right:20,zIndex:100,width:54,height:54,borderRadius:"50%",background:"linear-gradient(135deg,#6366F1,#8B5CF6)",color:"#FFF",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(99,102,241,0.5)",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,transition:"transform 0.15s",transform:showQuickAdd?"rotate(45deg)":"rotate(0deg)"}}>
+      <button className="ft-fab" onClick={()=>setShowQuickAdd(!showQuickAdd)}
+        style={{position:"fixed",bottom:20,right:20,zIndex:100,width:54,height:54,borderRadius:"50%",background:`linear-gradient(135deg,${A},${A}cc)`,color:"#FFF",border:"none",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px ${A}80`,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,transition:"transform 0.15s",transform:showQuickAdd?"rotate(45deg)":"rotate(0deg)"}}>
         +
       </button>
+
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <div className="ft-bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,height:68,background:T.surface,borderTop:`1px solid ${T.border}`,alignItems:"center",justifyContent:"space-around",zIndex:50,paddingBottom:"env(safe-area-inset-bottom)"}}>
+        {[
+          {id:"overview",  label:"Overview",  paths:["M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"]},
+          {id:"txns",      label:"Spend",     paths:["M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"]},
+          {id:"accounts",  label:"Accounts",  paths:["M1 4h22v16H1zM1 10h22"]},
+          {id:"recurring", label:"Recurring", paths:["M23 4v6h-6M1 20v-6h6M3.5 9A9 9 0 0 1 21 15M20.5 15A9 9 0 0 1 3 9"]},
+          {id:"settings",  label:"Settings",  paths:null},
+        ].map(item=>{
+          const isSettings=item.id==="settings";
+          const active=isSettings?showSettings:(tab===item.id&&!drillCat&&!showSettings);
+          return(
+            <button key={item.id} className="ft-bnav-btn"
+              onClick={()=>isSettings?(setShowSettings(true),setDrillCat(null)):navGo(item.id)}
+              style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",padding:"6px 10px",borderRadius:8,color:active?A:T.muted,fontFamily:"inherit",transition:"color 0.12s",minWidth:52,position:"relative"}}>
+              {isSettings
+                ?<div style={{width:22,height:22,borderRadius:7,background:active?A:`linear-gradient(135deg,${A},${A}cc)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#FFF"}}>{userInitials}</div>
+                :<Ic paths={item.paths} size={20}/>
+              }
+              <span style={{fontSize:9,fontWeight:active?700:400,lineHeight:1}}>{item.label}</span>
+              {item.id==="recurring"&&recurringBadgeCount>0&&(
+                <span style={{position:"absolute",top:4,right:8,background:"#E24B4A",color:"#FFF",borderRadius:8,fontSize:8,padding:"1px 4px",fontWeight:700,lineHeight:1.2}}>{recurringBadgeCount}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── UNDO TOAST ── */}
       {undoStack&&(
