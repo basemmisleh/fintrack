@@ -151,6 +151,41 @@ function generateInsights(monthData, cats, budgets, vm, vy){
   return insights.slice(0,5);
 }
 
+// ── CASH FLOW FORECAST ────────────────────────────────────────────
+function generateForecast(settings, recurring, monthlyIncome, startingBalance){
+  const today=new Date();
+  const weeks=[];
+  let balance=startingBalance||0;
+  const cycle=settings.payCycle||14;
+  const annualChecks=cycle===7?52:cycle===14?26:cycle===15?24:12;
+  const perCheck=monthlyIncome>0?monthlyIncome/(annualChecks/12):0;
+
+  const weeklyRec=recurring.filter(r=>r.freq==="weekly").reduce((s,r)=>s+(r.amount||0),0);
+  const biweeklyRec=recurring.filter(r=>r.freq==="biweekly").reduce((s,r)=>s+(r.amount||0),0);
+  const monthlyRec=recurring.filter(r=>r.freq==="monthly").reduce((s,r)=>s+(r.amount||0),0);
+
+  for(let w=0;w<12;w++){
+    const ws=new Date(today); ws.setDate(today.getDate()+w*7);
+    const we=new Date(ws); we.setDate(ws.getDate()+7);
+    let income=0;
+    if(settings.firstPaycheck){
+      const months=new Set([`${ws.getFullYear()}-${ws.getMonth()}`,`${we.getFullYear()}-${we.getMonth()}`]);
+      months.forEach(mk=>{
+        const [y,m]=mk.split("-").map(Number);
+        getPayDates(settings.firstPaycheck,cycle,y,m).forEach(d=>{
+          const pd=new Date(d+"T12:00:00");
+          if(pd>=ws&&pd<we) income+=perCheck;
+        });
+      });
+    }
+    const expenses=weeklyRec+(w%2===0?biweeklyRec:0)+monthlyRec/4.33;
+    balance+=income-expenses;
+    const label=w===0?"Now":`W${w+1}`;
+    weeks.push({label,balance:Math.round(balance),income:Math.round(income),expenses:Math.round(expenses)});
+  }
+  return weeks;
+}
+
 // ── MINI COMPONENTS ───────────────────────────────────────────────
 function Bar({val,max,color,h=7}){
   const w=max>0?Math.min(100,(val/max)*100):0;
@@ -174,6 +209,36 @@ function DonutChart({data,size=110}){
       ))}
       <text x={cx} y={cy-4} textAnchor="middle" fontSize="11" fontWeight="700" fill="#0F172A" fontFamily="DM Sans,Inter,sans-serif">{c0(data.reduce((s,d)=>s+(d.v||0),0))}</text>
       <text x={cx} y={cy+9} textAnchor="middle" fontSize="8" fill="#94A3B8" fontFamily="DM Sans,Inter,sans-serif">total spent</text>
+    </svg>
+  );
+}
+
+function ForecastChart({weeks, threshold}){
+  if(!weeks?.length) return null;
+  const vals=weeks.map(w=>w.balance);
+  const maxV=Math.max(...vals,threshold||0,1);
+  const minV=Math.min(...vals,0);
+  const range=maxV-minV||1;
+  const H=110; const barW=18; const gap=6; const W=weeks.length*(barW+gap);
+  const toY=v=>H-Math.max(0,((v-minV)/range)*H);
+  const zeroY=H-Math.max(0,(-minV/range)*H);
+  return(
+    <svg viewBox={`0 0 ${W} ${H+18}`} style={{width:"100%",height:H+18,display:"block",overflow:"visible"}}>
+      {threshold!=null&&(()=>{const ty=toY(threshold);return(<><line x1={0} y1={ty} x2={W} y2={ty} stroke="#EF9F27" strokeWidth={1} strokeDasharray="4,3" opacity={0.8}/><text x={W+2} y={ty+4} fontSize="7" fill="#BA7517">${(threshold/1000).toFixed(0)}k</text></>);})()}
+      {minV<0&&<line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke="#CBD5E1" strokeWidth={1}/>}
+      {weeks.map((w,i)=>{
+        const x=i*(barW+gap);
+        const isLow=threshold!=null&&w.balance<threshold;
+        const color=w.balance<0?"#E24B4A":isLow?"#F59E0B":"#6366F1";
+        const barH=Math.max(2,Math.abs(((w.balance-minV)/range)*H));
+        const y=toY(Math.max(w.balance,minV));
+        return(
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={barH} fill={color} opacity={0.8} rx={3}/>
+            <text x={x+barW/2} y={H+13} textAnchor="middle" fontSize="7" fill="#94A3B8">{w.label}</text>
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -600,6 +665,8 @@ export default function App(){
   const [importSearch,     setImportSearch]     = useState("");
   const [syncing,          setSyncing]          = useState(false);
   const [dismissedSubs,    setDismissedSubs]    = useState([]);
+  const [forecastBalance,  setForecastBalance]  = useState("");
+  const [forecastThreshold,setForecastThreshold]= useState(1000);
 
   // ── LOAD ──
   useEffect(()=>{
@@ -1099,6 +1166,39 @@ export default function App(){
               </div>
             </div>
           );})()}
+          {(()=>{
+            const weeks=generateForecast(settings,recurring,totalIncome,parseFloat(forecastBalance)||0);
+            const lowWeeks=weeks.filter(w=>w.balance<forecastThreshold);
+            return(
+              <div style={{...S.card,marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                  <div>
+                    <div style={S.ptitle}>12-week cash flow forecast</div>
+                    <div style={{fontSize:11,color:"#64748B"}}>Based on your pay schedule and recurring expenses</div>
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                    <div>
+                      <div style={{fontSize:9,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Current balance</div>
+                      <input type="number" inputMode="decimal" value={forecastBalance} onChange={e=>setForecastBalance(e.target.value)}
+                        placeholder="e.g. 5000" style={{...S.iy,width:100,fontSize:12,padding:"4px 8px"}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:2}}>Alert below</div>
+                      <input type="number" inputMode="decimal" value={forecastThreshold} onChange={e=>setForecastThreshold(parseFloat(e.target.value)||0)}
+                        style={{...S.input,width:80,fontSize:12,padding:"4px 8px"}}/>
+                    </div>
+                  </div>
+                </div>
+                <ForecastChart weeks={weeks} threshold={forecastThreshold}/>
+                {lowWeeks.length>0&&(
+                  <div style={{marginTop:8,fontSize:11,color:"#BA7517",background:"#FFFBEB",borderRadius:6,padding:"6px 10px"}}>
+                    ⚠ {lowWeeks.length} week{lowWeeks.length>1?"s":""} projected below {c0(forecastThreshold)}: {lowWeeks.map(w=>w.label).join(", ")}
+                  </div>
+                )}
+                {!settings.firstPaycheck&&<div style={{marginTop:8,fontSize:11,color:"#94A3B8"}}>Set your first paycheck date in Settings to include income in the forecast.</div>}
+              </div>
+            );
+          })()}
           {drillCat&&(
             <div style={{...S.card,marginBottom:16,border:"1.5px solid #AFA9EC"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
