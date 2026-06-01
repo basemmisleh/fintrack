@@ -1883,10 +1883,16 @@ export default function App(){
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:12,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant}</span>
+                          <input
+                            value={t.merchant}
+                            onChange={e=>setSyncedTxs(prev=>prev.map(tx=>tx.plaid_id===t.plaid_id?{...tx,merchant:e.target.value}:tx))}
+                            style={{fontSize:12,fontWeight:500,background:"transparent",border:"none",outline:"none",borderBottom:`1px solid transparent`,borderRadius:0,padding:"1px 0",color:T.text,fontFamily:"inherit",width:"100%",minWidth:0}}
+                            onFocus={e=>e.target.style.borderBottomColor=A}
+                            onBlur={e=>e.target.style.borderBottomColor="transparent"}
+                          />
                           {isFlagged&&<Pill label="⚑ Review" color="#BA7517" bg="#FEF3C7"/>}
                         </div>
-                        <div style={{fontSize:10,color:"#64748B"}}>{fmtD(t.date)} · {t.institution}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{fmtD(t.date)} · {t.institution}</div>
                       </div>
                       <select value={t.category}
                         onChange={e=>setSyncedTxs(prev=>prev.map(tx=>tx.plaid_id===t.plaid_id?{...tx,category:e.target.value}:tx))}
