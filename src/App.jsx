@@ -337,11 +337,101 @@ function makeStyles(dark, accent){
 let S = makeStyles(false,"#6366F1");
 
 // ── ICONS ─────────────────────────────────────────────────────────
-const Ic=({paths,size=16})=>(
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+const Ic=({paths,size=16,strokeWidth=1.8})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
     {paths.map((p,i)=><path key={i} d={p}/>)}
   </svg>
 );
+
+// ── MERCHANT LOGO ─────────────────────────────────────────────────
+const MERCHANT_DOMAINS={
+  "amazon":"amazon.com","target":"target.com","walmart":"walmart.com","costco":"costco.com",
+  "best buy":"bestbuy.com","home depot":"homedepot.com","lowes":"lowes.com","ikea":"ikea.com",
+  "tj maxx":"tjmaxx.com","marshalls":"marshalls.com","burlington":"burlington.com","ross":"rossstores.com",
+  "nordstrom":"nordstrom.com","macy":"macys.com","gap":"gap.com","old navy":"oldnavy.com",
+  "h&m":"hm.com","zara":"zara.com","nike":"nike.com","adidas":"adidas.com","uniqlo":"uniqlo.com",
+  "kroger":"kroger.com","whole foods":"wholefoodsmarket.com","trader joe":"traderjoes.com",
+  "safeway":"safeway.com","publix":"publix.com","aldi":"aldi.us","wegmans":"wegmans.com","sprouts":"sprouts.com",
+  "starbucks":"starbucks.com","mcdonald":"mcdonalds.com","chipotle":"chipotle.com",
+  "chick-fil-a":"chick-fil-a.com","chickfila":"chick-fil-a.com","subway":"subway.com",
+  "dunkin":"dunkindonuts.com","doordash":"doordash.com","uber eats":"ubereats.com",
+  "grubhub":"grubhub.com","instacart":"instacart.com","panera":"panerabread.com",
+  "olive garden":"olivegarden.com","cheesecake factory":"thecheesecakefactory.com",
+  "domino":"dominos.com","pizza hut":"pizzahut.com","taco bell":"tacobell.com","kfc":"kfc.com",
+  "netflix":"netflix.com","spotify":"spotify.com","hulu":"hulu.com","disney":"disneyplus.com",
+  "apple":"apple.com","youtube":"youtube.com","amc theatres":"amctheatres.com","amc theatre":"amctheatres.com",
+  "regal":"regmovies.com","steam":"steampowered.com","twitch":"twitch.tv","xbox":"xbox.com",
+  "google":"google.com","microsoft":"microsoft.com","adobe":"adobe.com","dropbox":"dropbox.com",
+  "slack":"slack.com","zoom":"zoom.us","github":"github.com","anthropic":"anthropic.com",
+  "openai":"openai.com","notion":"notion.so","figma":"figma.com","canva":"canva.com",
+  "venmo":"venmo.com","zelle":"zellepay.com","paypal":"paypal.com","cash app":"cash.app",
+  "chase":"chase.com","american express":"americanexpress.com","amex":"americanexpress.com",
+  "wells fargo":"wellsfargo.com","bank of america":"bankofamerica.com","capital one":"capitalone.com",
+  "citi":"citibank.com","usaa":"usaa.com","discover":"discover.com",
+  "uber":"uber.com","lyft":"lyft.com","tesla":"tesla.com","shell":"shell.com","chevron":"chevron.com",
+  "exxon":"exxonmobil.com","bp":"bp.com",
+  "cvs":"cvs.com","walgreens":"walgreens.com","sephora":"sephora.com","ulta":"ulta.com",
+  "airbnb":"airbnb.com","marriott":"marriott.com","hilton":"hilton.com","hyatt":"hyatt.com",
+  "southwest":"southwest.com","delta":"delta.com","american airlines":"aa.com","united":"united.com",
+  "expedia":"expedia.com","booking":"booking.com",
+  "planet fitness":"planetfitness.com","la fitness":"lafitness.com","equinox":"equinox.com",
+  "verizon":"verizon.com","at&t":"att.com","t-mobile":"t-mobile.com",
+  "robinhood":"robinhood.com","fidelity":"fidelity.com","schwab":"schwab.com","vanguard":"vanguard.com",
+  "coinbase":"coinbase.com","etsy":"etsy.com","ebay":"ebay.com","wayfair":"wayfair.com",
+};
+function merchantDomain(name){
+  if(!name) return null;
+  const lower=name.toLowerCase().trim();
+  for(const [key,domain] of Object.entries(MERCHANT_DOMAINS)){
+    if(lower.includes(key)) return domain;
+  }
+  const first=lower.split(/[\s,&#@!]/)[0].replace(/[^a-z0-9]/g,"");
+  return first.length>3?`${first}.com`:null;
+}
+function MerchantLogo({merchant,size=38,color,bg,isReimb,isPaidForOther}){
+  const [err,setErr]=useState(false);
+  const domain=merchantDomain(merchant);
+  const r=Math.round(size*0.28);
+  if(isPaidForOther) return(
+    <div style={{width:size,height:size,borderRadius:r,background:"#FFF7ED",border:"1.5px solid #FED7AA",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:Math.round(size*0.42),color:"#C2410C",fontWeight:700}}>↷</div>
+  );
+  if(isReimb) return(
+    <div style={{width:size,height:size,borderRadius:r,background:"#D1FAE5",border:"1.5px solid #6EE7B7",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:Math.round(size*0.42),color:"#059669",fontWeight:700}}>↩</div>
+  );
+  if(!err&&domain) return(
+    <div style={{width:size,height:size,borderRadius:r,overflow:"hidden",flexShrink:0,background:"#FFF",border:"1px solid #E8ECF0",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <img src={`https://logo.clearbit.com/${domain}`} onError={()=>setErr(true)} alt="" style={{width:size*0.7,height:size*0.7,objectFit:"contain"}}/>
+    </div>
+  );
+  return(
+    <div style={{width:size,height:size,borderRadius:r,background:bg||color+"1a"||(color+"22"),border:`1.5px solid ${color||"#888"}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <span style={{fontSize:Math.round(size*0.42),fontWeight:700,color:color||"#888",lineHeight:1}}>{(merchant||"?")[0].toUpperCase()}</span>
+    </div>
+  );
+}
+
+// ── CATEGORY ICONS ────────────────────────────────────────────────
+const CAT_ICON_PATHS={
+  housing:  ["M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z","M9 22V12h6v10"],
+  groceries:["M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z","M3 6h18","M16 10a4 4 0 0 1-8 0"],
+  dining:   ["M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2","M7 2v20","M21 15V2a5 5 0 0 0-5 5v6h5v7m0 0v3"],
+  transport:["M1 3h15v13H1z","M16 8h4l3 3v5h-7V8z","M5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z","M18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"],
+  entertain:["M2 2h20v20H2z","M2 7h20","M12 2v20","M7 2v5","M17 2v5","M7 17h.01","M17 17h.01"],
+  subs:     ["M23 4v6h-6","M1 20v-6h6","M3.51 9a9 9 0 0 1 14.85-3.36L23 10","M1 14l4.64 4.36A9 9 0 0 0 20.49 15"],
+  hustle:   ["M13 2L3 14h9l-1 8 10-12h-9l1-8z"],
+  savings:  ["M12 2v20","M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"],
+  roth:     ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"],
+  split:    ["M16 3h5v5","M8 3H3v5","M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3","M21 3l-7.828 7.828A4 4 0 0 0 12 13.7V22"],
+  other:    ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z","M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3","M12 17h.01"],
+};
+function CatIcon({catId,color,size=13}){
+  const paths=CAT_ICON_PATHS[catId]||CAT_ICON_PATHS.other;
+  return(
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||"currentColor"} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:0.9}}>
+      {paths.map((p,i)=><path key={i} d={p}/>)}
+    </svg>
+  );
+}
 const NAV_ITEMS=[
   {id:"overview", label:"Overview",    paths:["M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"]},
   {id:"txns",     label:"Transactions",paths:["M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"]},
@@ -632,20 +722,19 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
           <div key={tx.id} className="ft-tx-row" style={{...S.txrow,opacity:tx.isPaidForOther?0.5:1,cursor:bulkMode?"pointer":"default",background:bulkMode&&bulkSelected.has(tx.id)?"#EEF2FF":"transparent"}}
             onClick={bulkMode?()=>setBulkSelected(prev=>{const n=new Set(prev);n.has(tx.id)?n.delete(tx.id):n.add(tx.id);return n;}):undefined}>
             {bulkMode&&<input type="checkbox" readOnly checked={bulkSelected.has(tx.id)} style={{flexShrink:0,width:16,height:16,cursor:"pointer"}} onClick={e=>e.stopPropagation()}/>}
-            <div style={{width:38,height:38,borderRadius:10,background:tx.isPaidForOther?"#FFF7ED":tx.isReimb?"#D1FAE5":cc+"1a",border:`1.5px solid ${tx.isPaidForOther?"#FED7AA":tx.isReimb?"#6EE7B7":cc+"30"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <span style={{fontSize:15,fontWeight:700,color:tx.isPaidForOther?"#C2410C":tx.isReimb?"#059669":cc,lineHeight:1}}>
-                {tx.isPaidForOther?"↷":tx.isReimb?"↩":(tx.merchant||"?")[0].toUpperCase()}
-              </span>
-            </div>
+            <MerchantLogo merchant={tx.merchant} size={38} color={cc} bg={cb} isReimb={tx.isReimb} isPaidForOther={tx.isPaidForOther}/>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:12,fontWeight:500}}>{tx.merchant}</span>
-                {tx.isPaidForOther&&<Pill label="↷ paid for others" color="#C2410C" bg="#FFF7ED"/>}
+                <span style={{fontSize:13,fontWeight:600,color:S.T.text}}>{tx.merchant}</span>
+                {tx.isPaidForOther&&<Pill label="paid for others" color="#C2410C" bg="#FFF7ED"/>}
                 {tx.recurringId&&<Pill label="recurring" color="#0F6E56" bg="#E1F5EE"/>}
-                {tx.isReimb&&<Pill label="reimbursement ↩" color="#16A34A" bg="#E1F5EE"/>}
+                {tx.isReimb&&<Pill label="reimbursement" color="#16A34A" bg="#E1F5EE"/>}
                 {tx.isSplit&&<Pill label="split" color="#1565C0" bg="#E3F2FD"/>}
                 {tx.amount>=200&&!tx.isReimb&&!tx.isPaidForOther&&<Pill label="large" color="#7C3AED" bg="#EDE9FE"/>}
-                <Pill label={cl_(tx.cat)} color={cc} bg={cb}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:5,marginTop:2}}>
+                <CatIcon catId={tx.cat} color={cc} size={11}/>
+                <span style={{fontSize:11,color:cc,fontWeight:500}}>{cl_(tx.cat)}</span>
               </div>
               {tx.note&&<div style={{fontSize:10,color:"#64748B"}}>{tx.note}</div>}
               {tx.isSplit&&tx.splitWith?.length>0&&(
@@ -1548,12 +1637,13 @@ export default function App(){
                   const dateStr=u.dueDate.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
                   return(
                     <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.borderSubtle}`:"none"}}>
-                      <div style={{width:36,height:36,borderRadius:10,background:cc+"20",border:`1.5px solid ${cc}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:cc,flexShrink:0}}>
-                        {u.name[0].toUpperCase()}
-                      </div>
+                      <MerchantLogo merchant={u.name} size={36} color={cc} bg={catBg(cats,u.cat)}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:T.text}}>{u.name}</div>
-                        <div style={{fontSize:11,color:T.muted}}>{dateStr} · {catLabel(cats,u.cat)}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:4,marginTop:1}}>
+                          <CatIcon catId={u.cat} color={cc} size={10}/>
+                          <span style={{fontSize:11,color:T.muted}}>{dateStr} · {catLabel(cats,u.cat)}</span>
+                        </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
                         <div style={{fontSize:13,fontWeight:700,color:T.text}}>{c2(u.amount)}</div>
@@ -1630,7 +1720,7 @@ export default function App(){
                     style={{padding:"9px 6px",borderBottom:`1px solid ${T.borderSubtle}`,cursor:sp>0?"pointer":"default",borderRadius:6,transition:"background 0.12s"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:10,height:10,borderRadius:2,background:cat.color}}/>
+                        <CatIcon catId={cat.id} color={cat.color} size={13}/>
                         <span style={{fontSize:12,fontWeight:500}}>{cat.label}</span>
                         {alert==="red"&&<span style={{width:7,height:7,borderRadius:"50%",background:"#E24B4A",display:"inline-block",flexShrink:0}}/>}
                         {alert==="yellow"&&<span style={{width:7,height:7,borderRadius:"50%",background:"#EF9F27",display:"inline-block",flexShrink:0}}/>}
@@ -1898,9 +1988,7 @@ export default function App(){
                       <input type="checkbox" style={{flexShrink:0,width:16,height:16,cursor:"pointer"}}
                         checked={!!importSelections[t.plaid_id]}
                         onChange={e=>setImportSelections(prev=>({...prev,[t.plaid_id]:e.target.checked}))}/>
-                      <div style={{width:34,height:34,borderRadius:8,background:cc+"1a",border:`1.5px solid ${cc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <span style={{fontSize:13,fontWeight:700,color:cc}}>{(t.merchant[0]||"?").toUpperCase()}</span>
-                      </div>
+                      <MerchantLogo merchant={t.merchant} size={34} color={cc} bg={catBg(cats,t.category)}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
                           <input
@@ -2021,10 +2109,8 @@ export default function App(){
                 {detected.map(sub=>{
                   const cc=catColor(cats,sub.cat); const cb=catBg(cats,sub.cat);
                   return (
-                    <div key={sub.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F1F5F9",flexWrap:"wrap"}}>
-                      <div style={{width:36,height:36,borderRadius:9,background:cc+"1a",border:`1.5px solid ${cc}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:cc,flexShrink:0}}>
-                        {sub.merchant[0].toUpperCase()}
-                      </div>
+                    <div key={sub.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.borderSubtle}`,flexWrap:"wrap"}}>
+                      <MerchantLogo merchant={sub.merchant} size={36} color={cc} bg={cb}/>
                       <div style={{flex:1,minWidth:120}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           <span style={{fontSize:13,fontWeight:600}}>{sub.merchant}</span>
@@ -2468,7 +2554,7 @@ export default function App(){
                 <div key={cat.id} style={{padding:"8px 0",borderBottom:"1px solid #F1EFE8"}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:10,height:10,borderRadius:2,background:cat.color}}/>
+                      <CatIcon catId={cat.id} color={cat.color} size={13}/>
                       <span style={{fontSize:12,color:"#444441"}}>{cat.label}</span>
                     </div>
                     <div style={{display:"flex",gap:10}}>
