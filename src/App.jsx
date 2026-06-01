@@ -668,11 +668,19 @@ export default function App(){
   const [forecastBalance,  setForecastBalance]  = useState("");
   const [forecastThreshold,setForecastThreshold]= useState(1000);
 
+  // Net Worth state
+  const [plaidBalances,       setPlaidBalances]       = useState([]);
+  const [loadingBalances,     setLoadingBalances]     = useState(false);
+  const [manualAssets,        setManualAssets]        = useState([]);
+  const [networthSnapshots,   setNetworthSnapshots]   = useState([]);
+  const [showManualAssetForm, setShowManualAssetForm] = useState(false);
+  const [manualAssetForm,     setManualAssetForm]     = useState({name:"",type:"real_estate",value:""});
+
   // ── LOAD ──
   useEffect(()=>{
     async function load(){
       try {
-        const keys=["v3_md","v3_budgets","v3_goals","v3_settings","v3_cats","v3_recurring","v3_recurringSkips","v3_rollover","v3_dismissed_subs"];
+        const keys=["v3_md","v3_budgets","v3_goals","v3_settings","v3_cats","v3_recurring","v3_recurringSkips","v3_rollover","v3_dismissed_subs","v3_manual_assets","v3_nw_snapshots"];
         const res=await Promise.all(keys.map(k=>storage.get(k).catch(()=>null)));
         if(res[0]) setMonthData(JSON.parse(res[0].value));
         if(res[1]) setBudgets(JSON.parse(res[1].value));
@@ -683,12 +691,25 @@ export default function App(){
         if(res[6]) setRecurringSkips(JSON.parse(res[6].value));
         if(res[7]) setRollover(JSON.parse(res[7].value));
         if(res[8]) setDismissedSubs(JSON.parse(res[8].value));
+        if(res[9]) setManualAssets(JSON.parse(res[9].value));
+        if(res[10]) setNetworthSnapshots(JSON.parse(res[10].value));
       } catch(e){ console.error("Load error",e); }
       setLoaded(true);
     }
     load();
     loadConnections();
+    loadBalances();
   },[]);
+
+  const loadBalances = async()=>{
+    setLoadingBalances(true);
+    try{
+      const res=await fetch(`${FUNC_BASE}/plaid-get-balances`,{method:"POST"});
+      const data=await res.json();
+      if(data.accounts) setPlaidBalances(data.accounts);
+    }catch(e){console.error("Balance load error:",e);}
+    finally{setLoadingBalances(false);}
+  };
 
   const save = useCallback(async(key,value)=>{
     setSaving(true);
@@ -875,6 +896,23 @@ export default function App(){
     const next=recurring.filter(r=>r.id!==id); setRecurring(next); save("v3_recurring",next);
   };
 
+  // ── NET WORTH ──
+  const addManualAsset=()=>{
+    if(!manualAssetForm.name||!manualAssetForm.value) return;
+    const next=[...manualAssets,{id:Date.now(),...manualAssetForm,value:parseFloat(manualAssetForm.value)||0}];
+    setManualAssets(next); save("v3_manual_assets",next);
+    setManualAssetForm({name:"",type:"real_estate",value:""}); setShowManualAssetForm(false);
+  };
+  const delManualAsset=id=>{
+    const next=manualAssets.filter(a=>a.id!==id); setManualAssets(next); save("v3_manual_assets",next);
+  };
+  const saveSnapshot=(nw,assets,liabilities)=>{
+    const date=mkKey(CUR_Y,CUR_M);
+    const snap={date,netWorth:nw,assets,liabilities};
+    const next=[...networthSnapshots.filter(s=>s.date!==date),snap].sort((a,b)=>a.date.localeCompare(b.date)).slice(-24);
+    setNetworthSnapshots(next); save("v3_nw_snapshots",next);
+  };
+
   // ── PLAID ──
   const unlinkConnection = async (connectionId, institutionName) => {
     if (!window.confirm(`Unlink ${institutionName}? This will remove the connection and stop syncing.`)) return;
@@ -1004,7 +1042,7 @@ export default function App(){
       {/* NAV */}
       <div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
         <div style={S.nav}>
-          {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
+          {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["networth","Net Worth"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
             <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
               {l}{id==="recurring"&&recurringBadgeCount>0&&<span style={{marginLeft:4,background:"#E24B4A",color:"#FFF",borderRadius:10,fontSize:9,padding:"1px 5px",fontWeight:700,verticalAlign:"middle"}}>{recurringBadgeCount}</span>}
             </button>
@@ -1574,6 +1612,170 @@ export default function App(){
             })}
           </div>
         </>)}
+
+        {/* ══ NET WORTH ══ */}
+        {tab==="networth"&&(()=>{
+          const depository=plaidBalances.filter(a=>a.type==="depository");
+          const investment=plaidBalances.filter(a=>a.type==="investment");
+          const credit=plaidBalances.filter(a=>a.type==="credit");
+          const loan=plaidBalances.filter(a=>a.type==="loan");
+          const assetsPlaid=[...depository,...investment].reduce((s,a)=>s+(a.balance||0),0);
+          const assetsManual=manualAssets.reduce((s,a)=>s+(a.value||0),0);
+          const assetsTotal=assetsPlaid+assetsManual;
+          const liabilitiesTotal=[...credit,...loan].reduce((s,a)=>s+Math.abs(a.balance||0),0);
+          const netWorth=assetsTotal-liabilitiesTotal;
+          const prevSnap=networthSnapshots.length>=2?networthSnapshots[networthSnapshots.length-2]:null;
+          const momDelta=prevSnap?netWorth-prevSnap.netWorth:null;
+          const ASSET_TYPES={real_estate:"Real Estate",vehicle:"Vehicle",cash:"Cash / Savings",crypto:"Crypto",investment:"Investment",other:"Other"};
+          if(plaidBalances.length>0&&netWorth!==0) saveSnapshot(netWorth,assetsTotal,liabilitiesTotal);
+          return(<>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontSize:15,fontWeight:700}}>Net Worth</div>
+              <button style={S.btn("#6366F1")} onClick={loadBalances} disabled={loadingBalances}>{loadingBalances?"Refreshing…":"↻ Refresh"}</button>
+            </div>
+
+            {/* KPI cards */}
+            <div style={S.g3}>
+              <div style={{...S.kpi,border:"1.5px solid #6366F144"}}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:netWorth>=0?"#6366F1":"#E24B4A",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
+                <div style={{...S.klabel,marginTop:6}}>Net Worth</div>
+                <div style={S.kval(netWorth>=0?"#6366F1":"#E24B4A")}>{c0(netWorth)}</div>
+                {momDelta!==null&&<div style={S.ksub}>{momDelta>=0?"↑":"↓"} {c0(Math.abs(momDelta))} vs last month</div>}
+              </div>
+              <div style={S.kpi}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#1D9E75",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
+                <div style={{...S.klabel,marginTop:6}}>Total Assets</div>
+                <div style={S.kval("#1D9E75")}>{c0(assetsTotal)}</div>
+                <div style={S.ksub}>{c0(assetsManual)} manual · {c0(assetsPlaid)} Plaid</div>
+              </div>
+              <div style={S.kpi}>
+                <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#A32D2D",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
+                <div style={{...S.klabel,marginTop:6}}>Total Liabilities</div>
+                <div style={S.kval("#A32D2D")}>{c0(liabilitiesTotal)}</div>
+                <div style={S.ksub}>{credit.length} card{credit.length!==1?"s":""} · {loan.length} loan{loan.length!==1?"s":""}</div>
+              </div>
+            </div>
+
+            {/* Asset / Liability ratio bar */}
+            {assetsTotal+liabilitiesTotal>0&&(
+              <div style={{...S.card,marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:6}}>
+                  <span style={{color:"#1D9E75",fontWeight:600}}>Assets {assetsTotal+liabilitiesTotal>0?Math.round(assetsTotal/(assetsTotal+liabilitiesTotal)*100):0}%</span>
+                  <span style={{color:"#A32D2D",fontWeight:600}}>Liabilities {assetsTotal+liabilitiesTotal>0?Math.round(liabilitiesTotal/(assetsTotal+liabilitiesTotal)*100):0}%</span>
+                </div>
+                <div style={{height:10,borderRadius:10,overflow:"hidden",display:"flex"}}>
+                  <div style={{flex:assetsTotal||0.01,background:"#1D9E75",transition:"flex 0.5s"}}/>
+                  <div style={{flex:liabilitiesTotal||0.01,background:"#E24B4A",transition:"flex 0.5s"}}/>
+                </div>
+              </div>
+            )}
+
+            <div style={S.g2}>
+              {/* Assets */}
+              <div>
+                <div style={{...S.card,marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={S.ptitle}>Assets — {c0(assetsTotal)}</div>
+                    <button style={{...S.btn("#1D9E75"),fontSize:11}} onClick={()=>setShowManualAssetForm(v=>!v)}>+ Add manual</button>
+                  </div>
+                  {showManualAssetForm&&(
+                    <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,border:"1px solid #86EFAC"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                        <div><div style={S.slabel}>Name</div>
+                          <input type="text" style={S.iy} placeholder="e.g. Tesla Model 3" value={manualAssetForm.name}
+                            onChange={e=>setManualAssetForm(f=>({...f,name:e.target.value}))}/></div>
+                        <div><div style={S.slabel}>Type</div>
+                          <select style={S.sel} value={manualAssetForm.type} onChange={e=>setManualAssetForm(f=>({...f,type:e.target.value}))}>
+                            {Object.entries(ASSET_TYPES).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                          </select></div>
+                        <div style={{gridColumn:"span 2"}}><div style={S.slabel}>Value ($)</div>
+                          <input type="number" inputMode="decimal" style={S.iy} placeholder="0" value={manualAssetForm.value}
+                            onChange={e=>setManualAssetForm(f=>({...f,value:e.target.value}))}/></div>
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button style={S.btnS("#1D9E75")} onClick={addManualAsset}>Add →</button>
+                        <button style={S.btn("#64748B")} onClick={()=>setShowManualAssetForm(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {[...depository,...investment].map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600}}>{a.name} {a.mask?`···${a.mask}`:""}</div>
+                        <div style={{fontSize:10,color:"#94A3B8"}}>{a.institution} · {a.type}</div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#1D9E75"}}>{c2(a.balance||0)}</div>
+                    </div>
+                  ))}
+                  {manualAssets.map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600}}>{a.name}</div>
+                        <div style={{fontSize:10,color:"#94A3B8"}}>{ASSET_TYPES[a.type]||a.type} · manual</div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#1D9E75"}}>{c2(a.value)}</div>
+                        <button onClick={()=>delManualAsset(a.id)} style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16}}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                  {assetsPlaid===0&&manualAssets.length===0&&<div style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"20px 0"}}>No assets yet — connect a bank or add manually</div>}
+                </div>
+
+                {/* Liabilities */}
+                {liabilitiesTotal>0&&(
+                  <div style={S.card}>
+                    <div style={{...S.ptitle,marginBottom:12}}>Liabilities — {c0(liabilitiesTotal)}</div>
+                    {[...credit,...loan].map(a=>(
+                      <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600}}>{a.name} {a.mask?`···${a.mask}`:""}</div>
+                          <div style={{fontSize:10,color:"#94A3B8"}}>{a.institution} · {a.type}</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#A32D2D"}}>{c2(Math.abs(a.balance||0))}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* History chart */}
+              <div style={S.card}>
+                <div style={S.ptitle}>Net worth history</div>
+                {networthSnapshots.length<2?(
+                  <div style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"32px 0"}}>Check back next month — history builds over time as snapshots are saved.</div>
+                ):(()=>{
+                  const snaps=networthSnapshots.slice(-12);
+                  const maxV=Math.max(...snaps.map(s=>s.netWorth),1);
+                  const minV=Math.min(...snaps.map(s=>s.netWorth),0);
+                  const range=maxV-minV||1; const H=140;
+                  return(
+                    <div>
+                      <svg viewBox={`0 0 ${snaps.length*34} ${H+20}`} style={{width:"100%",height:H+20,display:"block"}}>
+                        {snaps.map((s,i)=>{
+                          const barH=Math.max(2,((s.netWorth-minV)/range)*H);
+                          const x=i*34+2; const y=H-barH;
+                          const color=s.netWorth>=0?"#6366F1":"#E24B4A";
+                          const [yr,mo]=s.date.split("-");
+                          return(
+                            <g key={i}>
+                              <rect x={x} y={y} width={28} height={barH} fill={color} opacity={0.75} rx={3}/>
+                              <text x={x+14} y={H+14} textAnchor="middle" fontSize="8" fill="#94A3B8">{MONTHS[parseInt(mo)-1]}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748B",marginTop:4}}>
+                        <span>Low: {c0(Math.min(...snaps.map(s=>s.netWorth)))}</span>
+                        <span>High: {c0(Math.max(...snaps.map(s=>s.netWorth)))}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </>);
+        })()}
 
         {/* ══ SPLITS ══ */}
         {tab==="splits"&&(<>
