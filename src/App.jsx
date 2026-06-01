@@ -572,7 +572,7 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
               {tx.isSplit&&tx.totalBill>0&&<div style={{fontSize:10,color:"#64748B"}}>of {c2(tx.totalBill)}</div>}
             </div>
             {showDel&&<button onClick={()=>startEditTx(tx)} title="Edit" style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:13,padding:"0 2px",flexShrink:0}}>✎</button>}
-            {showDel&&<button onClick={()=>delTx(tx.id)} style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0}}>×</button>}
+            {showDel&&<button onClick={()=>delTx(tx.id,tx.merchant)} style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0}}>×</button>}
           </div>
         );
       })}
@@ -842,7 +842,8 @@ export default function App(){
     setMonthData(next); save("v3_md",next);
   };
 
-  const delTx=id=>{
+  const delTx=(id,merchant)=>{
+    if(!window.confirm(`Delete "${merchant||"this transaction"}"?`)) return;
     const key=mkKey(vy,vm); const ex=monthData[key]||{};
     const next={...monthData,[key]:{...ex,transactions:(ex.transactions||[]).filter(t=>t.id!==id)}};
     setMonthData(next); save("v3_md",next);
