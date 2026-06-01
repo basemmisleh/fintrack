@@ -1033,7 +1033,7 @@ export default function App(){
   // ── NET WORTH ──
   const addManualAsset=()=>{
     if(!manualAssetForm.name||!manualAssetForm.value) return;
-    const next=[...manualAssets,{id:Date.now(),...manualAssetForm,value:parseFloat(manualAssetForm.value)||0}];
+    const next=[...manualAssets,{id:Date.now(),...manualAssetForm,value:parseFloat(manualAssetForm.value)||0,isLiability:false}];
     setManualAssets(next); save("v3_manual_assets",next);
     setManualAssetForm({name:"",type:"real_estate",value:""}); setShowManualAssetForm(false);
   };
@@ -2110,23 +2110,20 @@ export default function App(){
 
         {/* ══ NET WORTH ══ */}
         {tab==="networth"&&(()=>{
-          const depository=plaidBalances.filter(a=>a.type==="depository");
-          const investment=plaidBalances.filter(a=>a.type==="investment");
-          const credit=plaidBalances.filter(a=>a.type==="credit");
-          const loan=plaidBalances.filter(a=>a.type==="loan");
-          const assetsPlaid=[...depository,...investment].reduce((s,a)=>s+(a.balance||0),0);
-          const assetsManual=manualAssets.reduce((s,a)=>s+(a.value||0),0);
-          const assetsTotal=assetsPlaid+assetsManual;
-          const liabilitiesTotal=[...credit,...loan].reduce((s,a)=>s+Math.abs(a.balance||0),0);
-          const netWorth=assetsTotal-liabilitiesTotal;
+          const assetsTotal=manualAssets.reduce((s,a)=>s+(a.value||0),0);
+          const manualLiabilities=manualAssets.filter(a=>a.isLiability);
+          const manualAssetsOnly=manualAssets.filter(a=>!a.isLiability);
+          const assetsSum=manualAssetsOnly.reduce((s,a)=>s+(a.value||0),0);
+          const liabilitiesTotal=manualLiabilities.reduce((s,a)=>s+(a.value||0),0);
+          const netWorth=assetsSum-liabilitiesTotal;
           const prevSnap=networthSnapshots.length>=2?networthSnapshots[networthSnapshots.length-2]:null;
           const momDelta=prevSnap?netWorth-prevSnap.netWorth:null;
           const ASSET_TYPES={real_estate:"Real Estate",vehicle:"Vehicle",cash:"Cash / Savings",crypto:"Crypto",investment:"Investment",other:"Other"};
-          if(plaidBalances.length>0&&netWorth!==0) saveSnapshot(netWorth,assetsTotal,liabilitiesTotal);
+          const LIABILITY_TYPES={credit_card:"Credit Card",student_loan:"Student Loan",mortgage:"Mortgage",auto_loan:"Auto Loan",personal_loan:"Personal Loan",other:"Other Debt"};
+          if(assetsSum>0||liabilitiesTotal>0) saveSnapshot(netWorth,assetsSum,liabilitiesTotal);
           return(<>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:700}}>Net Worth</div>
-              <button style={S.btn("#6366F1")} onClick={loadBalances} disabled={loadingBalances}>{loadingBalances?"Refreshing…":"↻ Refresh"}</button>
             </div>
 
             {/* KPI cards */}
@@ -2140,14 +2137,14 @@ export default function App(){
               <div style={S.kpi}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#16A34A",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
                 <div style={{...S.klabel,marginTop:6}}>Total Assets</div>
-                <div style={S.kval("#16A34A")}>{c0(assetsTotal)}</div>
-                <div style={S.ksub}>{c0(assetsManual)} manual · {c0(assetsPlaid)} Plaid</div>
+                <div style={S.kval("#16A34A")}>{c0(assetsSum)}</div>
+                <div style={S.ksub}>{manualAssetsOnly.length} item{manualAssetsOnly.length!==1?"s":""} · manual</div>
               </div>
               <div style={S.kpi}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"#B91C1C",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
                 <div style={{...S.klabel,marginTop:6}}>Total Liabilities</div>
                 <div style={S.kval("#B91C1C")}>{c0(liabilitiesTotal)}</div>
-                <div style={S.ksub}>{credit.length} card{credit.length!==1?"s":""} · {loan.length} loan{loan.length!==1?"s":""}</div>
+                <div style={S.ksub}>{manualLiabilities.length} item{manualLiabilities.length!==1?"s":""} · manual</div>
               </div>
             </div>
 
@@ -2170,10 +2167,10 @@ export default function App(){
               <div>
                 <div style={{...S.card,marginBottom:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <div style={S.ptitle}>Assets — {c0(assetsTotal)}</div>
-                    <button style={{...S.btn("#16A34A"),fontSize:11}} onClick={()=>setShowManualAssetForm(v=>!v)}>+ Add manual</button>
+                    <div style={S.ptitle}>Assets — {c0(assetsSum)}</div>
+                    <button style={{...S.btn("#16A34A"),fontSize:11}} onClick={()=>setShowManualAssetForm(v=>v==="asset"?false:"asset")}>+ Add</button>
                   </div>
-                  {showManualAssetForm&&(
+                  {showManualAssetForm==="asset"&&(
                     <div style={{background:"#F0FDF4",borderRadius:8,padding:12,marginBottom:12,border:"1px solid #86EFAC"}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                         <div><div style={S.slabel}>Name</div>
@@ -2193,45 +2190,66 @@ export default function App(){
                       </div>
                     </div>
                   )}
-                  {[...depository,...investment].map(a=>(
-                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
+                  {manualAssetsOnly.map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
                       <div>
-                        <div style={{fontSize:12,fontWeight:600}}>{a.name} {a.mask?`···${a.mask}`:""}</div>
-                        <div style={{fontSize:10,color:"#94A3B8"}}>{a.institution} · {a.type}</div>
-                      </div>
-                      <div style={{fontSize:13,fontWeight:700,color:"#16A34A"}}>{c2(a.balance||0)}</div>
-                    </div>
-                  ))}
-                  {manualAssets.map(a=>(
-                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
-                      <div>
-                        <div style={{fontSize:12,fontWeight:600}}>{a.name}</div>
-                        <div style={{fontSize:10,color:"#94A3B8"}}>{ASSET_TYPES[a.type]||a.type} · manual</div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{ASSET_TYPES[a.type]||a.type}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#16A34A"}}>{c2(a.value)}</div>
-                        <button onClick={()=>delManualAsset(a.id)} style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16}}>×</button>
+                        <button onClick={()=>delManualAsset(a.id)} style={{background:"none",border:"none",color:T.subtle,cursor:"pointer",fontSize:16}}>×</button>
                       </div>
                     </div>
                   ))}
-                  {assetsPlaid===0&&manualAssets.length===0&&<div style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"20px 0"}}>No assets yet — connect a bank or add manually</div>}
+                  {manualAssetsOnly.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No assets yet — add your home, car, savings, or investments manually</div>}
                 </div>
 
                 {/* Liabilities */}
-                {liabilitiesTotal>0&&(
-                  <div className="ft-card" style={S.card}>
-                    <div style={{...S.ptitle,marginBottom:12}}>Liabilities — {c0(liabilitiesTotal)}</div>
-                    {[...credit,...loan].map(a=>(
-                      <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F1F5F9"}}>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:600}}>{a.name} {a.mask?`···${a.mask}`:""}</div>
-                          <div style={{fontSize:10,color:"#94A3B8"}}>{a.institution} · {a.type}</div>
-                        </div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#B91C1C"}}>{c2(Math.abs(a.balance||0))}</div>
-                      </div>
-                    ))}
+                <div className="ft-card" style={S.card}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={S.ptitle}>Liabilities — {c0(liabilitiesTotal)}</div>
+                    <button style={{...S.btn("#B91C1C"),fontSize:11}} onClick={()=>setShowManualAssetForm(v=>v==="liability"?false:"liability")}>+ Add</button>
                   </div>
-                )}
+                  {showManualAssetForm==="liability"&&(
+                    <div style={{background:dark?"#1A0808":"#FFF5F5",borderRadius:8,padding:12,marginBottom:12,border:"1px solid #FECACA"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                        <div><div style={S.slabel}>Name</div>
+                          <input type="text" style={S.iy} placeholder="e.g. Student Loan" value={manualAssetForm.name}
+                            onChange={e=>setManualAssetForm(f=>({...f,name:e.target.value}))}/></div>
+                        <div><div style={S.slabel}>Type</div>
+                          <select style={S.sel} value={manualAssetForm.type||"credit_card"} onChange={e=>setManualAssetForm(f=>({...f,type:e.target.value}))}>
+                            {Object.entries(LIABILITY_TYPES).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                          </select></div>
+                        <div style={{gridColumn:"span 2"}}><div style={S.slabel}>Balance owed ($)</div>
+                          <input type="number" inputMode="decimal" style={S.iy} placeholder="0" value={manualAssetForm.value}
+                            onChange={e=>setManualAssetForm(f=>({...f,value:e.target.value}))}/></div>
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button style={S.btnS("#B91C1C")} onClick={()=>{
+                          if(!manualAssetForm.name||!manualAssetForm.value) return;
+                          const next=[...manualAssets,{id:Date.now(),name:manualAssetForm.name,type:manualAssetForm.type||"credit_card",value:parseFloat(manualAssetForm.value)||0,isLiability:true}];
+                          setManualAssets(next); save("v3_manual_assets",next);
+                          setManualAssetForm({name:"",type:"real_estate",value:""}); setShowManualAssetForm(false);
+                        }}>Add →</button>
+                        <button style={S.btn("#64748B")} onClick={()=>setShowManualAssetForm(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {manualLiabilities.map(a=>(
+                    <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>{LIABILITY_TYPES[a.type]||a.type}</div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#B91C1C"}}>{c2(a.value)}</div>
+                        <button onClick={()=>delManualAsset(a.id)} style={{background:"none",border:"none",color:T.subtle,cursor:"pointer",fontSize:16}}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                  {manualLiabilities.length===0&&<div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"20px 0"}}>No liabilities — add credit cards, loans, or mortgages</div>}
+                </div>
               </div>
 
               {/* History chart */}
