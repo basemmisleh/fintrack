@@ -1892,73 +1892,138 @@ export default function App(){
             const isCredit=acct.type==="credit"||acct.type==="loan";
             const balance=Math.abs(acct.balance||0);
             const acctColor=isCredit?"#B91C1C":"#16A34A";
-            // gather all imported txns for this account by mask match in note field
+            // Robust matching: account name > mask > institution (in order of specificity)
+            const matchTx=tx=>{
+              if(!tx.note) return false;
+              const n=tx.note.toLowerCase();
+              if(acct.name&&n.includes(acct.name.toLowerCase())) return true;
+              if(acct.mask&&n.includes(acct.mask)) return true;
+              return false;
+            };
             const allTxs=Object.values(monthData).flatMap(md=>md.transactions||[])
-              .filter(tx=>tx.note&&acct.mask&&tx.note.includes(acct.mask))
-              .sort((a,b)=>b.date.localeCompare(a.date));
-            const totalSpent=allTxs.filter(t=>!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
-            const topCat=Object.entries(allTxs.reduce((m,t)=>{m[t.cat]=(m[t.cat]||0)+(t.amount||0);return m;},{})).sort((a,b)=>b[1]-a[1])[0];
+              .filter(matchTx).sort((a,b)=>b.date.localeCompare(a.date));
+            // Group by date
+            const byDate={};
+            allTxs.forEach(tx=>{if(!byDate[tx.date])byDate[tx.date]=[];byDate[tx.date].push(tx);});
+            const limit=acct.limit||acct.credit_limit||0;
+            const utilPct=limit>0?Math.round((balance/limit)*100):0;
+            const conn=connections.find(c=>c.institution_name===acct.institution);
+            const lastUpdate=conn?.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):null;
             return(
               <div>
-                {/* Header */}
-                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-                  <button onClick={()=>setDrillAccount(null)}
-                    style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:22,padding:"0 2px",lineHeight:1,fontFamily:"inherit"}}>←</button>
-                  <MerchantLogo merchant={acct.institution} size={40} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
-                  <div>
-                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{acct.name}</div>
-                    <div style={{fontSize:11,color:T.subtle}}>{acct.institution} · {acct.subtype||acct.type}</div>
-                  </div>
+                {/* Breadcrumb header */}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                  <button onClick={()=>setDrillAccount(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:13,fontFamily:"inherit",padding:0,display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:16}}>←</span> Accounts
+                  </button>
+                  <span style={{color:T.subtle}}>›</span>
+                  <MerchantLogo merchant={acct.institution} size={20} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
+                  <span style={{fontSize:13,fontWeight:600,color:T.text}}>{acct.name}</span>
                 </div>
-                {/* Balance + stats */}
-                <div className="ft-g3" style={{...S.g3,marginBottom:18}}>
-                  <div className="ft-kpi-card" style={S.kpi}>
-                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:acctColor,borderRadius:"18px 18px 0 0"}}/>
-                    <div style={{...S.klabel,marginTop:8}}>Current balance</div>
-                    <div style={S.kval(acctColor)}>{c2(balance)}</div>
-                    <div style={S.ksub}>{isCredit?"amount owed":"available"}</div>
+
+                {/* Balance chart card */}
+                <div className="ft-card" style={{...S.card,marginBottom:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
+                    <div>
+                      <div style={{fontSize:10,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.8px",fontWeight:600}}>Current Balance</div>
+                      <div style={{fontSize:30,fontWeight:800,color:acctColor,letterSpacing:"-0.8px",fontFamily:"'Fira Code','IBM Plex Mono',monospace"}}>{c2(balance)}</div>
+                      <div style={{fontSize:11,color:T.subtle,marginTop:2}}>$0.00 All time change</div>
+                    </div>
                   </div>
-                  <div className="ft-kpi-card" style={S.kpi}>
-                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:A,borderRadius:"18px 18px 0 0"}}/>
-                    <div style={{...S.klabel,marginTop:8}}>Total transactions</div>
-                    <div style={S.kval(A)}>{allTxs.length}</div>
-                    <div style={S.ksub}>all time imported</div>
-                  </div>
-                  <div className="ft-kpi-card" style={S.kpi}>
-                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:"#B45309",borderRadius:"18px 18px 0 0"}}/>
-                    <div style={{...S.klabel,marginTop:8}}>Top category</div>
-                    <div style={{...S.kval("#B45309"),fontSize:18}}>{topCat?catLabel(cats,topCat[0]):"—"}</div>
-                    <div style={S.ksub}>{topCat?c0(topCat[1])+" total":""}</div>
-                  </div>
+                  {/* Flat sparkline (single data point) */}
+                  <svg viewBox="0 0 400 60" style={{width:"100%",height:60,display:"block",marginTop:12}}>
+                    <line x1="0" y1="30" x2="400" y2="30" stroke={acctColor} strokeWidth="1.5" strokeDasharray="none" opacity="0.3"/>
+                    <circle cx="200" cy="30" r="4" fill={acctColor}/>
+                  </svg>
                 </div>
-                {/* Transaction list */}
-                {allTxs.length===0?(
-                  <div className="ft-card" style={{...S.card,textAlign:"center",padding:"40px 20px",color:T.subtle,fontSize:13}}>
-                    No imported transactions for this account yet.<br/>
-                    <span style={{fontSize:11,marginTop:4,display:"block"}}>Sync and import transactions from the Accounts tab.</span>
-                  </div>
-                ):(
+
+                {/* 2-column: transactions left, summary right */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:16,alignItems:"start"}}>
+                  {/* LEFT: transactions grouped by date */}
                   <div className="ft-card" style={S.card}>
-                    <div style={{...S.ptitle,marginBottom:12}}>Transactions — {allTxs.length} total · {c0(totalSpent)} spent</div>
-                    {allTxs.map((tx,i)=>{
-                      const cc=catColor(cats,tx.cat); const cb=catBg(cats,tx.cat);
+                    <div style={{...S.ptitle,marginBottom:16}}>Transactions — {allTxs.length}</div>
+                    {allTxs.length===0?(
+                      <div style={{textAlign:"center",padding:"32px 0",color:T.subtle,fontSize:13}}>
+                        No imported transactions for this account yet.<br/>
+                        <span style={{fontSize:11,display:"block",marginTop:4}}>Sync and import from the Accounts tab — transactions are matched by account name in their note.</span>
+                      </div>
+                    ):Object.entries(byDate).map(([date,txs])=>{
+                      const dayTotal=txs.reduce((s,t)=>s+(t.isReimb?-t.amount:t.amount),0);
                       return(
-                        <div key={tx.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<allTxs.length-1?`1px solid ${T.borderSubtle}`:"none"}}>
-                          <MerchantLogo merchant={tx.merchant} size={36} color={cc} bg={cb}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{tx.merchant}</div>
-                            <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
-                              <CatIcon catId={tx.cat} color={cc} size={10}/>
-                              <span style={{fontSize:11,color:cc}}>{catLabel(cats,tx.cat)}</span>
-                              <span style={{fontSize:10,color:T.subtle}}>· {fmtD(tx.date)}</span>
-                            </div>
+                        <div key={date}>
+                          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 6px",borderBottom:`1px solid ${T.border}`}}>
+                            <span style={{fontSize:12,fontWeight:600,color:T.muted}}>{fmtFull(date)}</span>
+                            <span style={{fontSize:12,fontWeight:600,color:T.muted}}>{c2(dayTotal)}</span>
                           </div>
-                          <div style={{fontSize:13,fontWeight:700,color:tx.isReimb?"#16A34A":T.text,flexShrink:0}}>{tx.isReimb?"+":""}{c2(tx.amount)}</div>
+                          {txs.map((tx,i)=>{
+                            const cc=catColor(cats,tx.cat); const cb=catBg(cats,tx.cat);
+                            return(
+                              <div key={tx.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<txs.length-1?`1px solid ${T.borderSubtle}`:"none"}}>
+                                <MerchantLogo merchant={tx.merchant} size={36} color={cc} bg={cb}/>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:T.text}}>{tx.merchant}</div>
+                                  <div style={{display:"flex",alignItems:"center",gap:5,marginTop:2}}>
+                                    <CatIcon catId={tx.cat} color={cc} size={11}/>
+                                    <span style={{fontSize:11,color:cc,fontWeight:500}}>{catLabel(cats,tx.cat)}</span>
+                                  </div>
+                                </div>
+                                <div style={{fontSize:13,fontWeight:700,color:tx.isReimb?"#16A34A":T.text,flexShrink:0}}>{tx.isReimb?"+":""}{c2(tx.amount)}</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}
                   </div>
-                )}
+
+                  {/* RIGHT: Summary + Connection status */}
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <div className="ft-card" style={S.card}>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:14}}>Summary</div>
+                      {isCredit&&limit>0&&(
+                        <div style={{marginBottom:14}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                            <span style={{fontSize:12,color:T.text}}>Credit utilization</span>
+                            <span style={{fontSize:12,fontWeight:700,color:utilPct>30?"#B91C1C":utilPct>10?"#B45309":"#16A34A"}}>{utilPct}%</span>
+                          </div>
+                          <div style={{height:6,borderRadius:6,background:T.elevated,overflow:"hidden",marginBottom:4}}>
+                            <div style={{height:"100%",width:`${Math.min(utilPct,100)}%`,background:utilPct>30?"#B91C1C":utilPct>10?"#B45309":"#16A34A",borderRadius:6,transition:"width 0.4s"}}/>
+                          </div>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.subtle}}>
+                            <span>{c2(balance)}</span><span>{c2(limit)}</span>
+                          </div>
+                        </div>
+                      )}
+                      {[
+                        {l:"Institution",    v:acct.institution,                    c:A},
+                        {l:"Account type",   v:acct.subtype||acct.type},
+                        ...(limit>0?[
+                          {l:"Credit limit",   v:c2(limit)},
+                          {l:"Credit remaining",v:c2(limit-balance),c:"#16A34A"},
+                        ]:[]),
+                        {l:"Total transactions",v:String(allTxs.length)},
+                      ].map(r=>(
+                        <div key={r.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                          <span style={{fontSize:12,color:T.subtle}}>{r.l}</span>
+                          <span style={{fontSize:12,fontWeight:600,color:r.c||T.text}}>{r.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="ft-card" style={S.card}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Connection status</div>
+                      {[
+                        {l:"Last update",  v:lastUpdate||"—"},
+                        {l:"Status",       v:"Connected",      c:"#16A34A"},
+                        {l:"Data provider",v:"Plaid"},
+                      ].map(r=>(
+                        <div key={r.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                          <span style={{fontSize:11,color:T.subtle}}>{r.l}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:r.c||T.text}}>{r.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })():(
