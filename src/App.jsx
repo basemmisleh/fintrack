@@ -856,6 +856,8 @@ export default function App(){
   const [showRecurForm,   setShowRecurForm]    = useState(false);
   const [recurForm,       setRecurForm]        = useState({name:"",cat:"subs",amount:"",freq:"monthly",startDate:now.toISOString().split("T")[0]});
   const [sidebarOpen,     setSidebarOpen]      = useState(()=>{ try{ return localStorage.getItem("ft_sidebar")!=="0"; }catch(e){ return true; } });
+  const [drillAccount,    setDrillAccount]     = useState(null);
+  const [collapsedGroups, setCollapsedGroups]  = useState({});
 
   // Plaid state
   const [connections,      setConnections]      = useState([]);
@@ -1884,81 +1886,202 @@ export default function App(){
 
         {/* ══ ACCOUNTS (PLAID) ══ */}
         {tab==="accounts"&&(<>
+          {/* ── ACCOUNT DRILL-DOWN ── */}
+          {drillAccount?(()=>{
+            const acct=drillAccount;
+            const isCredit=acct.type==="credit"||acct.type==="loan";
+            const balance=Math.abs(acct.balance||0);
+            const acctColor=isCredit?"#B91C1C":"#16A34A";
+            // gather all imported txns for this account by mask match in note field
+            const allTxs=Object.values(monthData).flatMap(md=>md.transactions||[])
+              .filter(tx=>tx.note&&acct.mask&&tx.note.includes(acct.mask))
+              .sort((a,b)=>b.date.localeCompare(a.date));
+            const totalSpent=allTxs.filter(t=>!t.isReimb).reduce((s,t)=>s+(t.amount||0),0);
+            const topCat=Object.entries(allTxs.reduce((m,t)=>{m[t.cat]=(m[t.cat]||0)+(t.amount||0);return m;},{})).sort((a,b)=>b[1]-a[1])[0];
+            return(
+              <div>
+                {/* Header */}
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+                  <button onClick={()=>setDrillAccount(null)}
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:22,padding:"0 2px",lineHeight:1,fontFamily:"inherit"}}>←</button>
+                  <MerchantLogo merchant={acct.institution} size={40} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{acct.name}</div>
+                    <div style={{fontSize:11,color:T.subtle}}>{acct.institution} · {acct.subtype||acct.type}</div>
+                  </div>
+                </div>
+                {/* Balance + stats */}
+                <div className="ft-g3" style={{...S.g3,marginBottom:18}}>
+                  <div className="ft-kpi-card" style={S.kpi}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:acctColor,borderRadius:"18px 18px 0 0"}}/>
+                    <div style={{...S.klabel,marginTop:8}}>Current balance</div>
+                    <div style={S.kval(acctColor)}>{c2(balance)}</div>
+                    <div style={S.ksub}>{isCredit?"amount owed":"available"}</div>
+                  </div>
+                  <div className="ft-kpi-card" style={S.kpi}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:A,borderRadius:"18px 18px 0 0"}}/>
+                    <div style={{...S.klabel,marginTop:8}}>Total transactions</div>
+                    <div style={S.kval(A)}>{allTxs.length}</div>
+                    <div style={S.ksub}>all time imported</div>
+                  </div>
+                  <div className="ft-kpi-card" style={S.kpi}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:"#B45309",borderRadius:"18px 18px 0 0"}}/>
+                    <div style={{...S.klabel,marginTop:8}}>Top category</div>
+                    <div style={{...S.kval("#B45309"),fontSize:18}}>{topCat?catLabel(cats,topCat[0]):"—"}</div>
+                    <div style={S.ksub}>{topCat?c0(topCat[1])+" total":""}</div>
+                  </div>
+                </div>
+                {/* Transaction list */}
+                {allTxs.length===0?(
+                  <div className="ft-card" style={{...S.card,textAlign:"center",padding:"40px 20px",color:T.subtle,fontSize:13}}>
+                    No imported transactions for this account yet.<br/>
+                    <span style={{fontSize:11,marginTop:4,display:"block"}}>Sync and import transactions from the Accounts tab.</span>
+                  </div>
+                ):(
+                  <div className="ft-card" style={S.card}>
+                    <div style={{...S.ptitle,marginBottom:12}}>Transactions — {allTxs.length} total · {c0(totalSpent)} spent</div>
+                    {allTxs.map((tx,i)=>{
+                      const cc=catColor(cats,tx.cat); const cb=catBg(cats,tx.cat);
+                      return(
+                        <div key={tx.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<allTxs.length-1?`1px solid ${T.borderSubtle}`:"none"}}>
+                          <MerchantLogo merchant={tx.merchant} size={36} color={cc} bg={cb}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{tx.merchant}</div>
+                            <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
+                              <CatIcon catId={tx.cat} color={cc} size={10}/>
+                              <span style={{fontSize:11,color:cc}}>{catLabel(cats,tx.cat)}</span>
+                              <span style={{fontSize:10,color:T.subtle}}>· {fmtD(tx.date)}</span>
+                            </div>
+                          </div>
+                          <div style={{fontSize:13,fontWeight:700,color:tx.isReimb?"#16A34A":T.text,flexShrink:0}}>{tx.isReimb?"+":""}{c2(tx.amount)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })():(
+          <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div>
-              <div style={{fontSize:15,fontWeight:700}}>Connected Accounts</div>
-              <div style={{fontSize:11,color:"#64748B",marginTop:2}}>Connect your bank accounts to automatically import transactions.</div>
+              <div style={{fontSize:15,fontWeight:700}}>Accounts</div>
+              <div style={{fontSize:11,color:T.subtle,marginTop:2}}>Connect your bank accounts to automatically import transactions.</div>
             </div>
             <PlaidConnectButton onConnected={()=>loadConnections()}/>
           </div>
 
-          {/* Bank cards */}
-          {connections.length===0?(
-            <div style={{...S.card,textAlign:"center",padding:"40px 20px",marginBottom:16}}>
-              <div style={{fontSize:36,marginBottom:12}}>🏦</div>
-              <div style={{fontSize:14,fontWeight:700,color:"#0F172A",marginBottom:6}}>No accounts connected yet</div>
-              <div style={{fontSize:12,color:"#64748B",marginBottom:16}}>Connect your Chase or Amex account to automatically import transactions.</div>
-              <PlaidConnectButton onConnected={()=>loadConnections()}/>
-            </div>
-          ):(
-            <div style={{...S.card,marginBottom:16}}>
-              <div style={S.ptitle}>Your banks</div>
-              {connections.map(conn=>(
-                <div key={conn.id} style={{padding:"12px 0",borderBottom:"1px solid #F1F5F9"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:14}}>
-                    <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🏦</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:700}}>{conn.institution_name}</div>
-                      <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
-                        Last synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
+          {/* Accounts grouped view */}
+          {(()=>{
+            const groups=[
+              {key:"cash",    label:"Cash",        types:["depository"],             color:"#16A34A"},
+              {key:"credit",  label:"Credit Cards", types:["credit","loan"],          color:"#B91C1C"},
+              {key:"invest",  label:"Investments",  types:["investment","brokerage"], color:"#6366F1"},
+            ];
+            const totalCash=plaidBalances.filter(a=>a.type==="depository").reduce((s,a)=>s+(a.balance||0),0);
+            const totalDebt=plaidBalances.filter(a=>a.type==="credit"||a.type==="loan").reduce((s,a)=>s+Math.abs(a.balance||0),0);
+            const totalInvest=plaidBalances.filter(a=>a.type==="investment"||a.type==="brokerage").reduce((s,a)=>s+(a.balance||0),0);
+            return(<>
+              {/* Summary KPIs */}
+              {plaidBalances.length>0&&(
+                <div className="ft-g3" style={{...S.g3,marginBottom:16}}>
+                  {[
+                    {l:"Cash & Checking",v:c2(totalCash),   c:"#16A34A",s:`${plaidBalances.filter(a=>a.type==="depository").length} accounts`},
+                    {l:"Credit Card Debt",v:c2(totalDebt),  c:"#B91C1C",s:`${plaidBalances.filter(a=>a.type==="credit"||a.type==="loan").length} cards`},
+                    {l:"Investments",    v:c2(totalInvest), c:"#6366F1", s:`${plaidBalances.filter(a=>a.type==="investment"||a.type==="brokerage").length} accounts`},
+                  ].map((k,i)=>(
+                    <div key={i} className="ft-kpi-card" style={S.kpi}>
+                      <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:k.c,borderRadius:"18px 18px 0 0"}}/>
+                      <div style={{...S.klabel,marginTop:8}}>{k.l}</div>
+                      <div style={S.kval(k.c)}>{k.v}</div>
+                      <div style={S.ksub}>{k.s}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Grouped account rows */}
+              {plaidBalances.length>0&&groups.map(g=>{
+                const accounts=plaidBalances.filter(a=>g.types.includes(a.type));
+                if(!accounts.length) return null;
+                const groupTotal=accounts.reduce((s,a)=>s+Math.abs(a.balance||0),0);
+                const collapsed=collapsedGroups[g.key];
+                return(
+                  <div key={g.key} className="ft-card" style={{...S.card,marginBottom:12}}>
+                    <button onClick={()=>setCollapsedGroups(p=>({...p,[g.key]:!p[g.key]}))}
+                      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginBottom:collapsed?0:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:g.color,flexShrink:0}}/>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{g.label}</span>
+                        <span style={{fontSize:11,color:T.subtle}}>{accounts.length} account{accounts.length!==1?"s":""}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:14,fontWeight:700,color:g.key==="credit"?"#B91C1C":"#16A34A"}}>{c2(groupTotal)}</span>
+                        <span style={{fontSize:12,color:T.subtle,transform:collapsed?"rotate(-90deg)":"rotate(0deg)",display:"inline-block",transition:"transform 0.15s"}}>▾</span>
+                      </div>
+                    </button>
+                    {!collapsed&&accounts.map(a=>{
+                      const isCredit=a.type==="credit"||a.type==="loan";
+                      const bal=Math.abs(a.balance||0);
+                      return(
+                        <div key={a.id||a.mask} onClick={()=>setDrillAccount(a)}
+                          style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.borderSubtle}`,cursor:"pointer",borderRadius:6,transition:"background 0.1s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.elevated}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <MerchantLogo merchant={a.institution||a.name} size={38} color={isCredit?"#B91C1C":"#16A34A"} bg={isCredit?"#FEE2E2":"#D1FAE5"}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{a.name}</div>
+                            <div style={{fontSize:11,color:T.subtle}}>{a.institution} · {a.subtype||a.type}{a.mask?` ···${a.mask}`:""}</div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:14,fontWeight:700,color:isCredit?"#B91C1C":"#16A34A"}}>{c2(bal)}</div>
+                            <div style={{fontSize:9,color:T.subtle,marginTop:1}}>tap to view</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {/* Connect / Sync */}
+              <div className="ft-card" style={{...S.card,marginBottom:16}}>
+                <div style={{...S.ptitle,marginBottom:12}}>Connected banks</div>
+                {connections.length===0?(
+                  <div style={{textAlign:"center",padding:"24px 0",color:T.subtle,fontSize:13}}>
+                    No accounts connected yet.<br/>
+                    <div style={{marginTop:12}}><PlaidConnectButton onConnected={()=>loadConnections()}/></div>
+                  </div>
+                ):(
+                  <>
+                  {connections.map(conn=>(
+                    <div key={conn.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.borderSubtle}`}}>
+                      <MerchantLogo merchant={conn.institution_name} size={38} color="#6366F1" bg="#EEF2FF"/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{conn.institution_name}</div>
+                        <div style={{fontSize:10,color:T.subtle}}>
+                          Synced: {conn.last_synced?new Date(conn.last_synced).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Never"}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
+                        <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
+                          style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
                       </div>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-                      <Pill label="Connected ✓" color="#10B981" bg="#D1FAE5"/>
-                      <button onClick={()=>unlinkConnection(conn.id,conn.institution_name)}
-                        style={{...S.btn("#E24B4A"),padding:"3px 10px",fontSize:11}}>Unlink</button>
-                    </div>
+                  ))}
+                  <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                    <button style={S.btnS("#6366F1")} onClick={syncTransactions} disabled={syncing}>
+                      {syncing?"↻ Syncing…":"↻ Sync Now"}
+                    </button>
+                    <PlaidConnectButton onConnected={()=>loadConnections()}/>
+                    {syncing&&<div style={{fontSize:11,color:"#6366F1"}}>Fetching from Plaid…</div>}
                   </div>
-                  {/* Individual card toggles */}
-                  {(conn.accounts||[]).length>0&&(
-                    <div style={{marginTop:10,marginLeft:56,display:"flex",flexDirection:"column",gap:6}}>
-                      {(conn.accounts||[]).map(a=>{
-                        const acctKey=a.name+(a.mask?` ···${a.mask}`:"");
-                        const isExcluded=(settings.excludedAccounts||[]).includes(acctKey);
-                        return(
-                          <div key={a.id||a.mask} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:isExcluded?"#FFF7ED":"#F8FAFC",borderRadius:8,padding:"7px 12px",border:`1px solid ${isExcluded?"#FED7AA":"#E2E8F0"}`}}>
-                            <div>
-                              <span style={{fontSize:12,fontWeight:600,color:isExcluded?"#C2410C":"#0F172A"}}>{acctKey}</span>
-                              <span style={{fontSize:10,color:"#94A3B8",marginLeft:8}}>{a.subtype||a.type}</span>
-                            </div>
-                            <button
-                              onClick={()=>{
-                                const cur=settings.excludedAccounts||[];
-                                const next=isExcluded?cur.filter(x=>x!==acctKey):[...cur,acctKey];
-                                const s={...settings,excludedAccounts:next};
-                                setSettings(s); save("v3_settings",s);
-                              }}
-                              style={{...S.btn(isExcluded?"#C2410C":"#16A34A"),padding:"3px 10px",fontSize:11,whiteSpace:"nowrap"}}>
-                              {isExcluded?"↷ Extension card":"✓ My card"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {(settings.excludedAccounts||[]).some(x=>(conn.accounts||[]).some(a=>(a.name+(a.mask?` ···${a.mask}`:""))===x))&&(
-                        <div style={{fontSize:10,color:"#C2410C",marginTop:2}}>Extension card transactions will be auto-flagged as "paid for someone else" on next sync.</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div style={{paddingTop:14,display:"flex",gap:10,alignItems:"center"}}>
-                <button style={S.btnS("#6366F1")} onClick={syncTransactions} disabled={syncing}>
-                  {syncing?"↻ Syncing…":"↻ Sync Now"}
-                </button>
-                {syncing&&<div style={{fontSize:11,color:"#6366F1"}}>Fetching transactions from Plaid…</div>}
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            </>);
+          })()}
 
           {/* Import preview */}
           {syncedTxs.length>0&&(<>
@@ -2022,6 +2145,7 @@ export default function App(){
               <button style={S.btn("#64748B")} onClick={()=>{setSyncedTxs([]);setImportSelections({});}}>Dismiss</button>
             </div>
           </>)}
+          </>)}  {/* end drillAccount else */}
         </>)}
 
         {/* ══ RECURRING ══ */}
@@ -2390,32 +2514,42 @@ export default function App(){
               <div className="ft-card" style={S.card}>
                 <div style={S.ptitle}>Net worth history</div>
                 {networthSnapshots.length<2?(
-                  <div style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"32px 0"}}>Check back next month — history builds over time as snapshots are saved.</div>
+                  <div style={{color:T.subtle,fontSize:12,textAlign:"center",padding:"32px 0"}}>History builds over time — check back after your first refresh.</div>
                 ):(()=>{
                   const snaps=networthSnapshots.slice(-12);
-                  const maxV=Math.max(...snaps.map(s=>s.netWorth),1);
-                  const minV=Math.min(...snaps.map(s=>s.netWorth),0);
-                  const range=maxV-minV||1; const H=140;
+                  const vals=snaps.map(s=>s.netWorth);
+                  const maxV=Math.max(...vals); const minV=Math.min(...vals);
+                  const range=maxV-minV||1; const H=140; const W=400;
+                  const px=(i)=>i*(W/(snaps.length-1));
+                  const py=(v)=>H-((v-minV)/range)*H;
+                  const pts=snaps.map((s,i)=>`${px(i)},${py(s.netWorth)}`).join(" ");
+                  const areaBot=H; const areaPts=`${px(0)},${areaBot} ${pts} ${px(snaps.length-1)},${areaBot}`;
+                  const lineColor=vals[vals.length-1]>=0?"#6366F1":"#E24B4A";
                   return(
                     <div>
-                      <svg viewBox={`0 0 ${snaps.length*34} ${H+20}`} style={{width:"100%",height:H+20,display:"block"}}>
+                      <div style={{fontSize:11,color:T.subtle,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
+                        <span>{c0(minV)}</span><span>{c0(maxV)}</span>
+                      </div>
+                      <svg viewBox={`0 0 ${W} ${H+18}`} style={{width:"100%",height:H+18,display:"block",overflow:"visible"}}>
+                        <defs>
+                          <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={lineColor} stopOpacity="0.18"/>
+                            <stop offset="100%" stopColor={lineColor} stopOpacity="0"/>
+                          </linearGradient>
+                        </defs>
+                        <polygon points={areaPts} fill="url(#nwGrad)"/>
+                        <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
                         {snaps.map((s,i)=>{
-                          const barH=Math.max(2,((s.netWorth-minV)/range)*H);
-                          const x=i*34+2; const y=H-barH;
-                          const color=s.netWorth>=0?"#6366F1":"#E24B4A";
-                          const [yr,mo]=s.date.split("-");
+                          const [,mo]=s.date.split("-");
+                          const isLast=i===snaps.length-1;
                           return(
                             <g key={i}>
-                              <rect x={x} y={y} width={28} height={barH} fill={color} opacity={0.75} rx={3}/>
-                              <text x={x+14} y={H+14} textAnchor="middle" fontSize="8" fill="#94A3B8">{MONTHS[parseInt(mo)-1]}</text>
+                              {isLast&&<circle cx={px(i)} cy={py(s.netWorth)} r="4" fill={lineColor}/>}
+                              <text x={px(i)} y={H+14} textAnchor="middle" fontSize="8" fill={isLast?lineColor:T.subtle}>{MONTHS[parseInt(mo)-1]}</text>
                             </g>
                           );
                         })}
                       </svg>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748B",marginTop:4}}>
-                        <span>Low: {c0(Math.min(...snaps.map(s=>s.netWorth)))}</span>
-                        <span>High: {c0(Math.max(...snaps.map(s=>s.netWorth)))}</span>
-                      </div>
                     </div>
                   );
                 })()}
