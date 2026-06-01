@@ -1165,6 +1165,7 @@ export default function App(){
   if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${settings.accentColor||"#6366F1"},${settings.accentColor||"#6366F1"}cc)`,animation:"spin 1s linear infinite"}}/><span style={{color:T.muted,fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
 
   // ── RENDER ────────────────────────────────────────────────────
+  const dark=settings.darkMode||false;
   const A=settings.accentColor||"#6366F1";
   const userInitials=(settings.userName||"").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)||"Me";
   const navGo=(id)=>{setTab(id);setDrillCat(null);setShowSettings(false);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);};
