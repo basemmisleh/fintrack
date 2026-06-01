@@ -496,7 +496,7 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
         const isEditing=editTxId===tx.id;
         if(isEditing&&editTxForm){
           return (
-            <div key={tx.id} style={{...S.txrow,flexDirection:"column",alignItems:"stretch",background:T.elevated,borderRadius:8,padding:"12px",margin:"4px 0"}}>
+            <div key={tx.id} style={{...S.txrow,flexDirection:"column",alignItems:"stretch",background:S.T.elevated,borderRadius:8,padding:"12px",margin:"4px 0"}}>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:8}}>
                 <div><div style={S.slabel}>Date</div>
                   <input type="date" style={S.input} value={editTxForm.date} onChange={e=>setEditTxForm({...editTxForm,date:e.target.value})}/></div>
@@ -1085,11 +1085,11 @@ export default function App(){
     return settings.rothOverrides?.[key]!==undefined?settings.rothOverrides[key]:(settings.rothRecurring||500);
   };
 
-  if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${settings.accentColor||"#6366F1"},${settings.accentColor||"#6366F1"}cc)`,animation:"spin 1s linear infinite"}}/><span style={{color:T.muted,fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
-
   // ── THEME ─────────────────────────────────────────────────────
   S = makeStyles(!!settings.darkMode, settings.accentColor||"#6366F1");
   const T = S.T;
+
+  if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${settings.accentColor||"#6366F1"},${settings.accentColor||"#6366F1"}cc)`,animation:"spin 1s linear infinite"}}/><span style={{color:T.muted,fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
 
   // ── RENDER ────────────────────────────────────────────────────
   return (
