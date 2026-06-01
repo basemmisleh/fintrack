@@ -312,12 +312,12 @@ function makeStyles(dark, accent){
     logo:   {fontSize:17,fontWeight:800,background:`linear-gradient(135deg,${A} 0%,${A}cc 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",letterSpacing:"-0.5px"},
     nav:    {display:"flex",gap:0,overflowX:"auto",background:T.surface,borderBottom:`1px solid ${T.border}`},
     nb:     a=>({padding:"0 14px",height:44,background:"transparent",border:"none",borderBottom:a?`2.5px solid ${A}`:"2.5px solid transparent",color:a?A:T.muted,fontSize:12,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}),
-    body:   {padding:"24px 28px",maxWidth:1200,margin:"0 auto"},
+    body:   {padding:"24px 28px"},
     mbar:   {display:"flex",gap:4,marginBottom:20,background:T.surface,borderRadius:12,padding:6,border:`1px solid ${T.border}`,boxShadow:T.shadowSm},
     mbtn:   (a,has)=>({flex:1,padding:"6px 2px",background:a?A+"22":"transparent",border:"none",borderRadius:7,color:a?A:has?T.text:T.subtle,fontSize:10,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",lineHeight:1.4}),
-    g4:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:16,marginBottom:20},
-    g2:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:18,marginBottom:18},
-    g3:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:16,marginBottom:18},
+    g4:     {display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20},
+    g2:     {display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:18,marginBottom:18},
+    g3:     {display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:18},
     card:   {background:T.surface,border:`1px solid ${T.border}`,borderRadius:18,padding:"20px 22px",boxShadow:T.shadowSm,transition:"background 0.3s,border-color 0.3s,box-shadow 0.18s"},
     kpi:    {background:T.surface,border:`1px solid ${T.border}`,borderRadius:18,padding:"18px 20px 16px",boxShadow:T.shadowSm,overflow:"hidden",position:"relative",transition:"background 0.3s"},
     klabel: {fontSize:10,color:T.muted,textTransform:"uppercase",letterSpacing:"0.9px",marginBottom:7,fontWeight:700},
@@ -1180,6 +1180,13 @@ export default function App(){
           .ft-main{margin-left:0!important;padding-bottom:68px!important;}
           .ft-bottom-nav{display:flex!important;}
           .ft-fab{bottom:88px!important;}
+          .ft-g4{grid-template-columns:repeat(2,1fr)!important;}
+          .ft-g2{grid-template-columns:1fr!important;}
+          .ft-g3{grid-template-columns:repeat(2,1fr)!important;}
+        }
+        @media(max-width:480px){
+          .ft-g4{grid-template-columns:1fr!important;}
+          .ft-g3{grid-template-columns:1fr!important;}
         }
         .ft-bottom-nav{display:none;}
         .ft-sidebar{transition:transform 0.22s cubic-bezier(0.4,0,0.2,1),box-shadow 0.22s!important;}
@@ -1493,7 +1500,7 @@ export default function App(){
           <IncomeRow incAvail={incAvail} settings={settings} editIncome={editIncome} setEditIncome={setEditIncome}
             tempVal={tempVal} setTempVal={setTempVal} curMD={curMD} updMD={updMD} vy={vy} vm={vm}
             isFirstPayMonth={isFirstPayMonth} payDates={payDates} pendingTotal={pendingTotal} setTab={setTab}/>
-          <div style={S.g4}>
+          <div className="ft-g4" style={S.g4}>
             {[
               {l:"Total income", v:c0(totalIncome), c:totalIncome>0?"#16A34A":"#5A6A82", s:curMD.bonus>0?`incl. ${c0(curMD.bonus)} bonus`:"this month"},
               {l:"Total spent",  v:c0(totalSpent),  c:totalSpent>totalIncome&&totalIncome>0?"#B91C1C":"#0C1524", s:`${c0(Object.values(budgets).reduce((s,v)=>s+v,0))} budgeted`},
@@ -1586,7 +1593,7 @@ export default function App(){
               </div>
             );
           })()}
-          <div style={S.g2}>
+          <div className="ft-g2" style={S.g2}>
             <div className="ft-card" style={S.card}>
               <div style={S.ptitle}>Spending by category</div>
               {cats.filter(cat=>catSpend(cat.id)>0||budgets[cat.id]>0).map(cat=>{
@@ -2031,7 +2038,7 @@ export default function App(){
             </div>
 
             {/* KPI cards */}
-            <div style={S.g3}>
+            <div className="ft-g3" style={S.g3}>
               <div style={{...S.kpi,border:"1.5px solid #6366F144"}}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:netWorth>=0?"#6366F1":"#E24B4A",opacity:0.85,borderRadius:"14px 14px 0 0"}}/>
                 <div style={{...S.klabel,marginTop:6}}>Net Worth</div>
@@ -2066,7 +2073,7 @@ export default function App(){
               </div>
             )}
 
-            <div style={S.g2}>
+            <div className="ft-g2" style={S.g2}>
               {/* Assets */}
               <div>
                 <div style={{...S.card,marginBottom:14}}>
@@ -2177,7 +2184,7 @@ export default function App(){
         {tab==="splits"&&(<>
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Splits</div>
-          <div style={S.g3}>
+          <div className="ft-g3" style={S.g3}>
             <div style={S.kpi}><div style={S.klabel}>Pending</div><div style={S.kval("#1565C0")}>{c0(pendingTotal)}</div><div style={S.ksub}>friends still owe you</div></div>
             <div style={S.kpi}><div style={S.klabel}>Split txns</div><div style={S.kval("#0F172A")}>{txList.filter(t=>t.isSplit).length}</div><div style={S.ksub}>this month</div></div>
             <div style={S.kpi}><div style={S.klabel}>Reimbursed</div><div style={S.kval("#16A34A")}>{c0(txList.filter(t=>t.isSplit).reduce((s,t)=>(t.splitWith||[]).filter(p=>p.paid).reduce((ss,p)=>ss+(p.owes||0),0)+s,0))}</div><div style={S.ksub}>received back</div></div>
@@ -2214,7 +2221,7 @@ export default function App(){
 
         {/* ══ ANNUAL ══ */}
         {tab==="annual"&&(<>
-          <div style={S.g4}>
+          <div className="ft-g4" style={S.g4}>
             {[
               {l:"Annual income",    v:c0(annualIncome), c:"#16A34A"},
               {l:"Annual spent",     v:c0(annualSpent),  c:"#0F172A"},
@@ -2228,7 +2235,7 @@ export default function App(){
               </div>
             ))}
           </div>
-          <div style={S.g2}>
+          <div className="ft-g2" style={S.g2}>
             <div className="ft-card" style={S.card}>
               <div style={S.ptitle}>Month by month — {vy}</div>
               <div style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 1fr",gap:6,marginBottom:8,paddingBottom:6,borderBottom:"1px solid #E8E6E0"}}>
@@ -2319,7 +2326,7 @@ export default function App(){
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm} setVy={setVy}/>
           <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Roth IRA</div>
           <div style={{fontSize:12,color:"#64748B",marginBottom:16}}>Auto-tracked from transactions · Add via Transactions tab with category "Roth IRA"</div>
-          <div style={S.g3}>
+          <div className="ft-g3" style={S.g3}>
             <div style={{...S.kpi,border:"1.5px solid #EF9F2744"}}>
               <div style={S.klabel}>Contributions YTD</div><div style={S.kval("#854F0B")}>{c0(rothYTD)}</div>
               <div style={S.ksub}>{c0(7000-rothYTD)} of $7,000 remaining</div>
@@ -2335,7 +2342,7 @@ export default function App(){
             <Bar val={rothYTD} max={7000} color="#BA7517" h={10}/>
             <div style={{fontSize:11,color:"#64748B",marginTop:5}}>{pct(rothYTD/7000,1)} used · {c0(7000-rothYTD)} remaining</div>
           </div>
-          <div style={S.g2}>
+          <div className="ft-g2" style={S.g2}>
             <div className="ft-card" style={S.card}>
               <div style={S.ptitle}>Month-by-month contributions</div>
               {MONTHS.map((m,i)=>{
