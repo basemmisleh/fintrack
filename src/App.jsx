@@ -459,7 +459,7 @@ function TxForm({txForm,setTxForm,splitPeople,setSplitPeople,addTx,setShowTxForm
   );
 }
 
-function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEditTxForm,startEditTx,saveTx}){
+function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEditTxForm,startEditTx,saveTx,bulkMode=false,bulkSelected=new Set(),setBulkSelected}){
   const cc_=(id)=>catColor(cats,id); const cb_=(id)=>catBg(cats,id); const cl_=(id)=>catLabel(cats,id);
   const grouped=[...txs].sort((a,b)=>new Date(b.date)-new Date(a.date))
     .reduce((acc,tx)=>{if(!acc[tx.date])acc[tx.date]=[];acc[tx.date].push(tx);return acc;},{});
@@ -535,7 +535,9 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
           );
         }
         return (
-          <div key={tx.id} style={{...S.txrow,opacity:tx.isPaidForOther?0.5:1}}>
+          <div key={tx.id} style={{...S.txrow,opacity:tx.isPaidForOther?0.5:1,cursor:bulkMode?"pointer":"default",background:bulkMode&&bulkSelected.has(tx.id)?"#EEF2FF":"transparent"}}
+            onClick={bulkMode?()=>setBulkSelected(prev=>{const n=new Set(prev);n.has(tx.id)?n.delete(tx.id):n.add(tx.id);return n;}):undefined}>
+            {bulkMode&&<input type="checkbox" readOnly checked={bulkSelected.has(tx.id)} style={{flexShrink:0,width:16,height:16,cursor:"pointer"}} onClick={e=>e.stopPropagation()}/>}
             <div style={{width:38,height:38,borderRadius:10,background:tx.isPaidForOther?"#FFF7ED":tx.isReimb?"#D1FAE5":cc+"1a",border:`1.5px solid ${tx.isPaidForOther?"#FED7AA":tx.isReimb?"#6EE7B7":cc+"30"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <span style={{fontSize:15,fontWeight:700,color:tx.isPaidForOther?"#C2410C":tx.isReimb?"#059669":cc,lineHeight:1}}>
                 {tx.isPaidForOther?"↷":tx.isReimb?"↩":(tx.merchant||"?")[0].toUpperCase()}
@@ -662,6 +664,9 @@ export default function App(){
   const [txSearch,        setTxSearch]        = useState("");
   const [editTxId,        setEditTxId]        = useState(null);
   const [editTxForm,      setEditTxForm]      = useState(null);
+  const [bulkMode,        setBulkMode]        = useState(false);
+  const [bulkSelected,    setBulkSelected]    = useState(new Set());
+  const [bulkCat,         setBulkCat]         = useState("dining");
   const [showQuickAdd,    setShowQuickAdd]     = useState(false);
   const [quickForm,       setQuickForm]        = useState({merchant:"",amount:"",cat:"dining"});
   const [showRecurForm,   setShowRecurForm]    = useState(false);
@@ -873,6 +878,14 @@ export default function App(){
     const next={...monthData,[key]:{...ex,transactions:txs}};
     setMonthData(next); save("v3_md",next);
     setEditTxId(null); setEditTxForm(null);
+  };
+
+  const applyBulkCat=()=>{
+    const key=mkKey(vy,vm); const ex=monthData[key]||{};
+    const txs=(ex.transactions||[]).map(t=>bulkSelected.has(t.id)?{...t,cat:bulkCat}:t);
+    const next={...monthData,[key]:{...ex,transactions:txs}};
+    setMonthData(next); save("v3_md",next);
+    setBulkSelected(new Set()); setBulkMode(false);
   };
 
   const confirmRecurring=(rec,y,m)=>{
@@ -1336,8 +1349,29 @@ export default function App(){
           <MonthBar vm={vm} vy={vy} monthData={monthData} setVm={setVm}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:15,fontWeight:700}}>{FULLMONTHS[vm]}</div>
-            <button style={S.btnS("#6366F1")} onClick={()=>setShowTxForm(!showTxForm)}>{showTxForm?"✕ Cancel":"+ Add"}</button>
+            <div style={{display:"flex",gap:8}}>
+              <button style={bulkMode?S.btnS("#6366F1"):S.btn("#6366F1")} onClick={()=>{setBulkMode(v=>!v);setBulkSelected(new Set());}}>
+                {bulkMode?"✕ Cancel select":"⊡ Select"}
+              </button>
+              {!bulkMode&&<button style={S.btnS("#6366F1")} onClick={()=>setShowTxForm(!showTxForm)}>{showTxForm?"✕ Cancel":"+ Add"}</button>}
+            </div>
           </div>
+          {bulkMode&&(
+            <div style={{...S.card,marginBottom:12,background:"#EEF2FF",border:"1.5px solid #AFA9EC"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,fontWeight:600,color:"#6366F1"}}>{bulkSelected.size} selected</span>
+                <button style={{...S.btn("#64748B"),fontSize:11,padding:"3px 10px"}} onClick={()=>{const all=new Set(filteredTxList.map(t=>t.id));setBulkSelected(all);}}>Select all</button>
+                <button style={{...S.btn("#64748B"),fontSize:11,padding:"3px 10px"}} onClick={()=>setBulkSelected(new Set())}>Clear</button>
+                <div style={{flex:1}}/>
+                {bulkSelected.size>0&&(<>
+                  <select value={bulkCat} onChange={e=>setBulkCat(e.target.value)} style={{...S.sel,width:140,fontSize:12}}>
+                    {cats.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                  <button style={S.btnS("#6366F1")} onClick={applyBulkCat}>Apply to {bulkSelected.size}</button>
+                </>)}
+              </div>
+            </div>
+          )}
           {showTxForm&&<TxForm txForm={txForm} setTxForm={setTxForm} splitPeople={splitPeople} setSplitPeople={setSplitPeople} addTx={addTx} setShowTxForm={setShowTxForm} cats={cats}/>}
           {!showTxForm&&(
             <div style={{marginBottom:10}}>
@@ -1359,7 +1393,7 @@ export default function App(){
               <div style={S.ptitle}>{filteredTxList.length} transaction{filteredTxList.length!==1?"s":""}{txSearch?" (filtered)":""}</div>
               <span style={{fontSize:13,fontWeight:700}}>{c0(totalSpent)} net</span>
             </div>
-            <TxList txs={filteredTxList} addReimb={addReimb} delTx={delTx} cats={cats} editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}/>
+            <TxList txs={filteredTxList} addReimb={addReimb} delTx={delTx} cats={cats} editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx} bulkMode={bulkMode} bulkSelected={bulkSelected} setBulkSelected={setBulkSelected}/>
           </div>
           <div style={{...S.card,marginTop:14}}>
             <div style={S.ptitle}>Monthly budget targets</div>
