@@ -484,7 +484,8 @@ export default function App(){
   const [monthData,      setMonthData]      = useState({});
   const [budgets,        setBudgets]        = useState({housing:1500,groceries:400,dining:200,transport:250,entertain:150,subs:80,hustle:0,savings:500,roth:500,split:0,other:100});
   const [goals,          setGoals]          = useState([{id:1,name:"Emergency Fund",target:15000,saved:0,color:"#1D9E75"},{id:2,name:"Vacation",target:3000,saved:0,color:"#6366F1"}]);
-  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{}});
+  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{},flagKeywords:["Amex Send"]});
+  const [drillCat,       setDrillCat]       = useState(null);
   const [cats,           setCats]           = useState(DEFAULT_CATS);
   const [recurring,      setRecurring]      = useState([]);
   const [recurringSkips, setRecurringSkips] = useState({});
@@ -524,7 +525,7 @@ export default function App(){
         if(res[0]) setMonthData(JSON.parse(res[0].value));
         if(res[1]) setBudgets(JSON.parse(res[1].value));
         if(res[2]) setGoals(JSON.parse(res[2].value));
-        if(res[3]) setSettings(JSON.parse(res[3].value));
+        if(res[3]) setSettings(def=>({...def,...JSON.parse(res[3].value)}));
         if(res[4]) setCats(JSON.parse(res[4].value));
         if(res[5]) setRecurring(JSON.parse(res[5].value));
         if(res[6]) setRecurringSkips(JSON.parse(res[6].value));
@@ -767,8 +768,12 @@ export default function App(){
         alert(`${data.skipped.join(", ")}: still loading initial transactions. Plaid needs a few minutes on first connect. Try again shortly.`);
       }
       setSyncedTxs(fresh);
+      const keywords = settings.flagKeywords || [];
       const sel = {};
-      fresh.forEach(t => { sel[t.plaid_id] = true; });
+      fresh.forEach(t => {
+        const flagged = keywords.some(kw => kw && t.merchant.toLowerCase().includes(kw.toLowerCase()));
+        sel[t.plaid_id] = !flagged;
+      });
       setImportSelections(sel);
       loadConnections();
     } catch(e) { console.error("Sync error:", e); alert("Sync failed: " + e.message); }
@@ -917,6 +922,26 @@ export default function App(){
               </div>
             </div>
             <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16,marginTop:4}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={S.ptitle}>Flag keywords for review</div>
+              </div>
+              <div style={{fontSize:11,color:"#64748B",marginBottom:10}}>Transactions matching these keywords are unchecked by default and highlighted for review on import.</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+                {(settings.flagKeywords||[]).map((kw,i)=>(
+                  <div key={i} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:20,padding:"3px 10px",fontSize:12}}>
+                    <span style={{color:"#78350F",fontWeight:600}}>{kw}</span>
+                    <button onClick={()=>{const next={...settings,flagKeywords:(settings.flagKeywords||[]).filter((_,j)=>j!==i)};setSettings(next);save("v3_settings",next);}}
+                      style={{background:"none",border:"none",color:"#B45309",cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <input type="text" style={{...S.input,flex:1}} placeholder="Add keyword (e.g. Amex Send)"
+                  onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){const next={...settings,flagKeywords:[...(settings.flagKeywords||[]),e.target.value.trim()]};setSettings(next);save("v3_settings",next);e.target.value="";}}}/>
+                <button style={S.btn("#BA7517")} onClick={e=>{const inp=e.target.previousSibling;if(inp.value.trim()){const next={...settings,flagKeywords:[...(settings.flagKeywords||[]),inp.value.trim()]};setSettings(next);save("v3_settings",next);inp.value=""}}}>+ Add</button>
+              </div>
+            </div>
+            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16,marginTop:4}}>
               <div style={S.ptitle}>Danger zone</div>
               <button style={{...S.btn("#E24B4A"),fontSize:12}} onClick={clearAllData}>
                 🗑 Clear all transaction data
@@ -959,9 +984,20 @@ export default function App(){
               </div>
             ))}
           </div>
+          {drillCat&&(
+            <div style={{...S.card,marginBottom:16,border:"1.5px solid #AFA9EC"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                <button style={{...S.btn("#6366F1"),padding:"4px 12px",fontSize:11}} onClick={()=>{setDrillCat(null);startEditTx(null);}}>← Back</button>
+                <div style={{fontSize:14,fontWeight:700}}>{catLabel(cats,drillCat)}</div>
+                <div style={{fontSize:12,color:"#64748B"}}>{c0(catSpend(drillCat))} · {txList.filter(t=>t.cat===drillCat&&!t.isReimb).length} transactions</div>
+              </div>
+              <TxList txs={txList.filter(t=>t.cat===drillCat)} addReimb={addReimb} delTx={delTx} cats={cats}
+                editTxId={editTxId} editTxForm={editTxForm} setEditTxForm={setEditTxForm} startEditTx={startEditTx} saveTx={saveTx}/>
+            </div>
+          )}
           <div style={S.g2}>
             <div style={S.card}>
-              <div style={S.ptitle}>Spending by category</div>
+              <div style={S.ptitle}>Spending by category — click to drill down</div>
               {cats.filter(cat=>catSpend(cat.id)>0||budgets[cat.id]>0).map(cat=>{
                 const sp=catSpend(cat.id);
                 const effBudget=getEffBudget(cat.id,vy,vm);
@@ -972,7 +1008,10 @@ export default function App(){
                 const delta=sp-prevSp;
                 const rolloverAmt=rollover[cat.id]?Math.max(0,(budgets[cat.id]||0)-prevSp):0;
                 return (
-                  <div key={cat.id} style={{padding:"9px 0",borderBottom:"1px solid #F1EFE8"}}>
+                  <div key={cat.id} onClick={()=>sp>0&&setDrillCat(cat.id)}
+                    style={{padding:"9px 0",borderBottom:"1px solid #F1EFE8",cursor:sp>0?"pointer":"default",borderRadius:4,transition:"background 0.1s"}}
+                    onMouseEnter={e=>{if(sp>0)e.currentTarget.style.background="#F8F7FF";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <div style={{width:10,height:10,borderRadius:2,background:cat.color}}/>
@@ -1148,8 +1187,9 @@ export default function App(){
                 .slice(0,150)
                 .map(t=>{
                   const cc=catColor(cats,t.category); const cb=catBg(cats,t.category);
+                  const isFlagged=(settings.flagKeywords||[]).some(kw=>kw&&t.merchant.toLowerCase().includes(kw.toLowerCase()));
                   return (
-                    <div key={t.plaid_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #F1F5F9"}}>
+                    <div key={t.plaid_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${isFlagged?"#FEF3C7":"#F1F5F9"}`,background:isFlagged?"#FFFBEB":"transparent"}}>
                       <input type="checkbox" style={{flexShrink:0,width:16,height:16,cursor:"pointer"}}
                         checked={!!importSelections[t.plaid_id]}
                         onChange={e=>setImportSelections(prev=>({...prev,[t.plaid_id]:e.target.checked}))}/>
@@ -1157,7 +1197,10 @@ export default function App(){
                         <span style={{fontSize:13,fontWeight:700,color:cc}}>{(t.merchant[0]||"?").toUpperCase()}</span>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:12,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.merchant}</span>
+                          {isFlagged&&<Pill label="⚑ Review" color="#BA7517" bg="#FEF3C7"/>}
+                        </div>
                         <div style={{fontSize:10,color:"#64748B"}}>{fmtD(t.date)} · {t.institution}</div>
                       </div>
                       <select value={t.category}
