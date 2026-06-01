@@ -243,33 +243,54 @@ function ForecastChart({weeks, threshold}){
   );
 }
 
-// ── STYLES ────────────────────────────────────────────────────────
-const S = {
-  app:    {minHeight:"100vh",background:"#F1F5F9",fontFamily:"'DM Sans','Inter','Segoe UI',sans-serif",fontSize:13,color:"#0F172A"},
-  topbar: {background:"rgba(255,255,255,0.92)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",borderBottom:"1px solid #E2E8F0",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:30,boxShadow:"0 1px 12px rgba(15,23,42,0.06)"},
-  logo:   {fontSize:17,fontWeight:800,background:"linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",letterSpacing:"-0.5px"},
-  nav:    {display:"flex",gap:0,overflowX:"auto"},
-  nb:     a=>({padding:"0 14px",height:44,background:"transparent",border:"none",borderBottom:a?"2.5px solid #6366F1":"2.5px solid transparent",color:a?"#6366F1":"#64748B",fontSize:12,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}),
-  body:   {padding:"20px",maxWidth:1200,margin:"0 auto"},
-  mbar:   {display:"flex",gap:4,marginBottom:20,background:"#FFF",borderRadius:12,padding:6,border:"1px solid #E2E8F0",boxShadow:"0 1px 4px rgba(15,23,42,0.04)"},
-  mbtn:   (a,has)=>({flex:1,padding:"6px 2px",background:a?"#EEF2FF":"transparent",border:"none",borderRadius:7,color:a?"#6366F1":has?"#334155":"#CBD5E1",fontSize:10,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",lineHeight:1.4}),
-  g4:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14,marginBottom:18},
-  g2:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:16},
-  g3:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16},
-  card:   {background:"#FFF",border:"1px solid #E2E8F0",borderRadius:14,padding:"18px 20px",boxShadow:"0 1px 4px rgba(15,23,42,0.04)"},
-  kpi:    {background:"#FFF",border:"1px solid #E2E8F0",borderRadius:14,padding:"16px 18px 14px",boxShadow:"0 1px 4px rgba(15,23,42,0.04)",overflow:"hidden",position:"relative"},
-  klabel: {fontSize:10,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:6,fontWeight:700},
-  kval:   c=>({fontSize:26,fontWeight:800,color:c||"#0F172A",letterSpacing:"-0.5px",lineHeight:1.1}),
-  ksub:   {fontSize:11,color:"#94A3B8",marginTop:5},
-  ptitle: {fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:14},
-  slabel: {fontSize:10,color:"#94A3B8",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5,fontWeight:600},
-  input:  {background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"8px 12px",color:"#0F172A",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
-  iy:     {background:"#FFFBEB",border:"1.5px solid #F59E0B",borderRadius:8,padding:"8px 12px",color:"#78350F",fontSize:13,fontWeight:600,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
-  sel:    {background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"8px 12px",color:"#0F172A",fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
-  btn:    c=>({background:c+"18",border:`1.5px solid ${c}35`,borderRadius:8,padding:"7px 14px",color:c,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}),
-  btnS:   c=>({background:c,border:`1.5px solid ${c}`,borderRadius:8,padding:"7px 16px",color:"#FFF",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:`0 2px 8px ${c}45`}),
-  txrow:  {display:"flex",alignItems:"flex-start",gap:12,padding:"11px 0",borderBottom:"1px solid #F1F5F9"},
+// ── THEME ─────────────────────────────────────────────────────────
+const LIGHT = {
+  bg:"#F1F5F9", surface:"#FFFFFF", elevated:"#F8FAFC",
+  border:"#E2E8F0", borderSubtle:"#F1F5F9",
+  text:"#0F172A", muted:"#64748B", subtle:"#94A3B8",
+  shadow:"0 2px 8px rgba(15,23,42,0.06)", shadowSm:"0 1px 4px rgba(15,23,42,0.04)",
+  inputBg:"#F8FAFC", navBg:"rgba(255,255,255,0.92)",
 };
+const DARK = {
+  bg:"#020617", surface:"#0E1223", elevated:"#1E293B",
+  border:"rgba(255,255,255,0.08)", borderSubtle:"rgba(255,255,255,0.05)",
+  text:"#F8FAFC", muted:"#94A3B8", subtle:"#64748B",
+  shadow:"0 2px 16px rgba(0,0,0,0.4)", shadowSm:"0 1px 6px rgba(0,0,0,0.3)",
+  inputBg:"#1E293B", navBg:"rgba(2,6,23,0.92)",
+};
+
+function makeStyles(dark, accent){
+  const T=dark?DARK:LIGHT; const A=accent||"#6366F1";
+  return {
+    T,
+    app:    {minHeight:"100vh",background:T.bg,fontFamily:"'IBM Plex Sans','DM Sans','Inter',sans-serif",fontSize:13,color:T.text,transition:"background 0.3s,color 0.3s"},
+    topbar: {background:T.navBg,backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:30,boxShadow:T.shadow},
+    logo:   {fontSize:17,fontWeight:800,background:`linear-gradient(135deg,${A} 0%,${A}cc 100%)`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",letterSpacing:"-0.5px"},
+    nav:    {display:"flex",gap:0,overflowX:"auto",background:T.surface,borderBottom:`1px solid ${T.border}`},
+    nb:     a=>({padding:"0 14px",height:44,background:"transparent",border:"none",borderBottom:a?`2.5px solid ${A}`:"2.5px solid transparent",color:a?A:T.muted,fontSize:12,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}),
+    body:   {padding:"20px",maxWidth:1200,margin:"0 auto"},
+    mbar:   {display:"flex",gap:4,marginBottom:20,background:T.surface,borderRadius:12,padding:6,border:`1px solid ${T.border}`,boxShadow:T.shadowSm},
+    mbtn:   (a,has)=>({flex:1,padding:"6px 2px",background:a?A+"22":"transparent",border:"none",borderRadius:7,color:a?A:has?T.text:T.subtle,fontSize:10,cursor:"pointer",fontWeight:a?700:500,transition:"all 0.15s",fontFamily:"inherit",lineHeight:1.4}),
+    g4:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14,marginBottom:18},
+    g2:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:16},
+    g3:     {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:16},
+    card:   {background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,padding:"18px 20px",boxShadow:T.shadowSm,transition:"background 0.3s,border-color 0.3s"},
+    kpi:    {background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,padding:"16px 18px 14px",boxShadow:T.shadowSm,overflow:"hidden",position:"relative",transition:"background 0.3s"},
+    klabel: {fontSize:10,color:T.muted,textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:6,fontWeight:700},
+    kval:   c=>({fontSize:26,fontWeight:800,color:c||T.text,letterSpacing:"-0.5px",lineHeight:1.1}),
+    ksub:   {fontSize:11,color:T.subtle,marginTop:5},
+    ptitle: {fontSize:10,fontWeight:700,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:14},
+    slabel: {fontSize:10,color:T.subtle,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5,fontWeight:600},
+    input:  {background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",color:T.text,fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
+    iy:     {background:dark?"#2D1F00":"#FFFBEB",border:`1.5px solid #F59E0B`,borderRadius:8,padding:"8px 12px",color:dark?"#FDE68A":"#78350F",fontSize:13,fontWeight:600,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
+    sel:    {background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",color:T.text,fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},
+    btn:    c=>({background:c+"22",border:`1.5px solid ${c}40`,borderRadius:8,padding:"7px 14px",color:c,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"}),
+    btnS:   c=>({background:c,border:`1.5px solid ${c}`,borderRadius:8,padding:"7px 16px",color:"#FFF",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:`0 3px 10px ${c}50`,transition:"all 0.15s"}),
+    txrow:  {display:"flex",alignItems:"flex-start",gap:12,padding:"11px 0",borderBottom:`1px solid ${T.borderSubtle}`},
+  };
+}
+// S is initialized with defaults; inside App it gets recomputed from settings
+let S = makeStyles(false,"#6366F1");
 
 // ── TOP-LEVEL COMPONENTS ──────────────────────────────────────────
 function MonthBar({vm,vy,monthData,setVm}){
@@ -475,7 +496,7 @@ function TxList({txs,showDel=true,addReimb,delTx,cats,editTxId,editTxForm,setEdi
         const isEditing=editTxId===tx.id;
         if(isEditing&&editTxForm){
           return (
-            <div key={tx.id} style={{...S.txrow,flexDirection:"column",alignItems:"stretch",background:"#FAFAF8",borderRadius:8,padding:"12px",margin:"4px 0"}}>
+            <div key={tx.id} style={{...S.txrow,flexDirection:"column",alignItems:"stretch",background:T.elevated,borderRadius:8,padding:"12px",margin:"4px 0"}}>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:8}}>
                 <div><div style={S.slabel}>Date</div>
                   <input type="date" style={S.input} value={editTxForm.date} onChange={e=>setEditTxForm({...editTxForm,date:e.target.value})}/></div>
@@ -1064,7 +1085,11 @@ export default function App(){
     return settings.rothOverrides?.[key]!==undefined?settings.rothOverrides[key]:(settings.rothRecurring||500);
   };
 
-  if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#6366F1,#8B5CF6)",animation:"spin 1s linear infinite"}}/><span style={{color:"#64748B",fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
+  if(!loaded) return <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${settings.accentColor||"#6366F1"},${settings.accentColor||"#6366F1"}cc)`,animation:"spin 1s linear infinite"}}/><span style={{color:T.muted,fontSize:12,fontWeight:500}}>Loading your finances…</span></div>;
+
+  // ── THEME ─────────────────────────────────────────────────────
+  S = makeStyles(!!settings.darkMode, settings.accentColor||"#6366F1");
+  const T = S.T;
 
   // ── RENDER ────────────────────────────────────────────────────
   return (
@@ -1082,11 +1107,11 @@ export default function App(){
           )}
           <div style={{width:1,height:14,background:"#E2E8F0"}}/>
           {showSettings?(
-            <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>Settings</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Settings</span>
           ):drillCat?(
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat)}}/>
-              <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>{catLabel(cats,drillCat)}</span>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{catLabel(cats,drillCat)}</span>
               <span style={{fontSize:11,color:"#94A3B8"}}>{FULLMONTHS[vm]}</span>
             </div>
           ):(
@@ -1104,7 +1129,7 @@ export default function App(){
       </div>
 
       {/* NAV */}
-      {!drillCat&&!showSettings&&<div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
+      {!drillCat&&!showSettings&&<div style={{...S.nav,padding:"0 20px"}}>
         <div style={S.nav}>
           {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["networth","Net Worth"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
             <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
@@ -1214,11 +1239,18 @@ export default function App(){
                 {/* Appearance */}
                 <div style={{...S.card,marginBottom:16}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:16}}>Appearance</div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={S.slabel}>Dark mode</div>
+                    <button onClick={()=>upd({darkMode:!settings.darkMode})}
+                      style={{width:48,height:26,borderRadius:13,background:settings.darkMode?accent:"#CBD5E1",border:"none",cursor:"pointer",position:"relative",transition:"background 0.3s",padding:0}}>
+                      <div style={{width:20,height:20,borderRadius:10,background:"#FFF",position:"absolute",top:3,left:settings.darkMode?25:3,transition:"left 0.3s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
+                    </button>
+                  </div>
                   <div style={S.slabel}>Accent color</div>
                   <div style={{display:"flex",gap:10,marginTop:8,flexWrap:"wrap"}}>
                     {ACCENT_COLORS.map(c=>(
                       <button key={c.v} onClick={()=>upd({accentColor:c.v})}
-                        style={{width:36,height:36,borderRadius:10,background:c.v,border:accent===c.v?`3px solid #0F172A`:"3px solid transparent",cursor:"pointer",boxShadow:accent===c.v?`0 0 0 2px #FFF,0 0 0 4px ${c.v}`:"none",transition:"all 0.15s"}}
+                        style={{width:36,height:36,borderRadius:10,background:c.v,border:accent===c.v?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",boxShadow:accent===c.v?`0 0 0 2px ${T.surface},0 0 0 4px ${c.v}`:"none",transition:"all 0.15s"}}
                         title={c.n}/>
                     ))}
                   </div>
@@ -1410,7 +1442,7 @@ export default function App(){
                 return (
                   <div key={cat.id} onClick={()=>sp>0&&setDrillCat(cat.id)}
                     style={{padding:"9px 0",borderBottom:"1px solid #F1EFE8",cursor:sp>0?"pointer":"default",borderRadius:4,transition:"background 0.1s"}}
-                    onMouseEnter={e=>{if(sp>0)e.currentTarget.style.background="#F8F7FF";}}
+                    onMouseEnter={e=>{if(sp>0)e.currentTarget.style.background=T.elevated;}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -2052,7 +2084,7 @@ export default function App(){
                 const sv=inc-sp; const has=(md.transactions||[]).length>0; const isNow=i===CUR_M&&vy===CUR_Y;
                 return (
                   <div key={i} onClick={()=>{setVm(i);setTab("overview");}}
-                    style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 1fr",gap:6,padding:"6px 4px",borderBottom:"1px solid #F1EFE8",cursor:"pointer",background:isNow?"#F8F7FF":"transparent",borderRadius:4}}>
+                    style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 1fr",gap:6,padding:"6px 4px",borderBottom:`1px solid ${T.borderSubtle}`,cursor:"pointer",background:isNow?T.elevated:"transparent",borderRadius:4}}>
                     <div style={{fontSize:12,fontWeight:isNow?700:400,color:isNow?"#6366F1":"#444441"}}>{m}</div>
                     <div style={{fontSize:12,textAlign:"right",color:has?"#1D9E75":"#CBD5E1"}}>{has?c0(inc):"—"}</div>
                     <div style={{fontSize:12,textAlign:"right",color:has?"#0F172A":"#CBD5E1"}}>{has?c0(sp):"—"}</div>
