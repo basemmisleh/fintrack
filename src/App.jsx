@@ -644,7 +644,7 @@ export default function App(){
   const [monthData,      setMonthData]      = useState({});
   const [budgets,        setBudgets]        = useState({housing:1500,groceries:400,dining:200,transport:250,entertain:150,subs:80,hustle:0,savings:500,roth:500,split:0,other:100});
   const [goals,          setGoals]          = useState([{id:1,name:"Emergency Fund",target:15000,saved:0,color:"#1D9E75"},{id:2,name:"Vacation",target:3000,saved:0,color:"#6366F1"}]);
-  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{},flagKeywords:["Amex Send"],excludedAccounts:[]});
+  const [settings,       setSettings]       = useState({jobStart:DEFAULT_JOB_START,firstPaycheck:DEFAULT_FIRST_CHECK,payCycle:DEFAULT_PAY_CYCLE,rothRecurring:500,rothOverrides:{},flagKeywords:["Amex Send"],excludedAccounts:[],userName:"",accentColor:"#6366F1"});
   const [drillCat,       setDrillCat]       = useState(null);
   const [cats,           setCats]           = useState(DEFAULT_CATS);
   const [recurring,      setRecurring]      = useState([]);
@@ -1055,37 +1055,39 @@ export default function App(){
       {/* TOPBAR */}
       <div style={S.topbar}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          {drillCat?(
-            <>
-              <button onClick={()=>{setDrillCat(null);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
-                style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:"#6366F1",fontWeight:700,fontSize:13,padding:0,fontFamily:"inherit"}}>
-                ← <span style={S.logo}>fintrack</span>
-              </button>
-              <div style={{width:1,height:14,background:"#E2E8F0"}}/>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat)}}/>
-                <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>{catLabel(cats,drillCat)}</span>
-                <span style={{fontSize:11,color:"#94A3B8"}}>{FULLMONTHS[vm]}</span>
-              </div>
-            </>
+          {(drillCat||showSettings)?(
+            <button onClick={()=>{setDrillCat(null);setShowSettings(false);setBulkMode(false);setBulkSelected(new Set());startEditTx(null);}}
+              style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,color:settings.accentColor||"#6366F1",fontWeight:700,fontSize:13,padding:0,fontFamily:"inherit"}}>
+              ← <span style={{...S.logo,backgroundImage:`linear-gradient(135deg,${settings.accentColor||"#6366F1"} 0%,${settings.accentColor||"#6366F1"}99 100%)`}}>fintrack</span>
+            </button>
+          ):(
+            <div style={{...S.logo,backgroundImage:`linear-gradient(135deg,${settings.accentColor||"#6366F1"} 0%,${settings.accentColor||"#8B5CF6"} 100%)`}}>fintrack</div>
+          )}
+          <div style={{width:1,height:14,background:"#E2E8F0"}}/>
+          {showSettings?(
+            <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>Settings</span>
+          ):drillCat?(
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:10,height:10,borderRadius:2,background:catColor(cats,drillCat)}}/>
+              <span style={{fontSize:13,fontWeight:700,color:"#0F172A"}}>{catLabel(cats,drillCat)}</span>
+              <span style={{fontSize:11,color:"#94A3B8"}}>{FULLMONTHS[vm]}</span>
+            </div>
           ):(
             <>
-              <div style={S.logo}>fintrack</div>
-              <div style={{width:1,height:14,background:"#E2E8F0"}}/>
               <div style={{fontSize:11,color:"#64748B"}}>{FULLMONTHS[vm]} {vy}</div>
               {pendingTotal>0&&<div style={{fontSize:11,background:"#E3F2FD",color:"#1565C0",padding:"2px 8px",borderRadius:20,fontWeight:600,cursor:"pointer"}} onClick={()=>setTab("splits")}>💸 {c0(pendingTotal)}</div>}
             </>
           )}
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <button style={{...S.btn("#64748B"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowSettings(!showSettings)}>⚙</button>
-          <button style={{...S.btn("#6366F1"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowExport(!showExport)}>↓</button>
+          {!showSettings&&!drillCat&&<button style={{...S.btn("#64748B"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowSettings(true)}>⚙</button>}
+          {!showSettings&&!drillCat&&<button style={{...S.btn("#6366F1"),padding:"4px 10px",fontSize:11}} onClick={()=>setShowExport(!showExport)}>↓</button>}
           <div style={{fontSize:10,fontWeight:600,color:saving?"#10B981":"#CBD5E1",minWidth:40,transition:"color 0.4s",display:"flex",alignItems:"center",gap:4}}>{saving?<><span style={{width:6,height:6,borderRadius:"50%",background:"#10B981",display:"inline-block"}}/>saving</> :<><span style={{width:6,height:6,borderRadius:"50%",background:"#CBD5E1",display:"inline-block"}}/>saved</>}</div>
         </div>
       </div>
 
       {/* NAV */}
-      {!drillCat&&<div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
+      {!drillCat&&!showSettings&&<div style={{background:"#FFF",borderBottom:"1px solid #E2E8F0",padding:"0 20px"}}>
         <div style={S.nav}>
           {[["overview","Overview"],["txns","Transactions"],["accounts","Accounts"],["recurring","Recurring"],["networth","Net Worth"],["annual","Annual"],["splits","Splits"],["goals","Goals"],["roth","Roth IRA"]].map(([id,l])=>(
             <button key={id} style={S.nb(tab===id)} onClick={()=>setTab(id)}>
@@ -1164,109 +1166,134 @@ export default function App(){
           );
         })()}
 
-        {!drillCat&&<>
+        {!drillCat&&!showSettings&&<>
 
-        {/* SETTINGS */}
+        {/* ══ SETTINGS PAGE ══ */}
         {showSettings&&(
-          <div style={{...S.card,marginBottom:16,border:"1.5px solid #E8E6E0"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
-              <div style={S.ptitle}>Settings</div>
-              <button style={S.btn("#64748B")} onClick={()=>setShowSettings(false)}>Close</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:20}}>
-              <div>
-                <div style={S.slabel}>Job start date</div>
-                <input type="date" style={S.iy} value={settings.jobStart}
-                  onChange={e=>{const next={...settings,jobStart:e.target.value};setSettings(next);save("v3_settings",next);}}/>
-              </div>
-              <div>
-                <div style={S.slabel}>First paycheck date</div>
-                <input type="date" style={{...S.iy,borderColor:settings.firstPaycheck?"#EF9F27":"#E24B4A"}} value={settings.firstPaycheck||""}
-                  onChange={e=>{const next={...settings,firstPaycheck:e.target.value};setSettings(next);save("v3_settings",next);}}/>
-                <div style={{fontSize:10,color:settings.firstPaycheck?"#64748B":"#A32D2D",marginTop:4}}>
-                  {settings.firstPaycheck?"Pay dates calculated from here":"Set this when HR confirms"}
+          <div>
+            {/* ── PROFILE ── */}
+            {(()=>{
+              const accent=settings.accentColor||"#6366F1";
+              const initials=(settings.userName||"").split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)||"Me";
+              const ACCENT_COLORS=[{v:"#6366F1",n:"Indigo"},{v:"#8B5CF6",n:"Violet"},{v:"#0EA5E9",n:"Sky"},{v:"#10B981",n:"Emerald"},{v:"#F59E0B",n:"Amber"},{v:"#F43F5E",n:"Rose"}];
+              const upd=(patch)=>{const next={...settings,...patch};setSettings(next);save("v3_settings",next);};
+              return(
+                <>
+                {/* Profile card */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:16}}>Profile</div>
+                  <div style={{display:"flex",alignItems:"center",gap:20}}>
+                    <div style={{width:64,height:64,borderRadius:20,background:`linear-gradient(135deg,${accent},${accent}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:800,color:"#FFF",flexShrink:0,boxShadow:`0 4px 16px ${accent}40`}}>
+                      {initials}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={S.slabel}>Your name</div>
+                      <input type="text" style={{...S.input,fontSize:15,fontWeight:600}} placeholder="e.g. Basem Misleh"
+                        value={settings.userName||""} onChange={e=>upd({userName:e.target.value})}/>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div style={S.slabel}>Pay cycle</div>
-                <select style={S.sel} value={settings.payCycle||14}
-                  onChange={e=>{const next={...settings,payCycle:parseInt(e.target.value)};setSettings(next);save("v3_settings",next);}}>
-                  <option value={7}>Weekly</option><option value={14}>Biweekly</option>
-                  <option value={15}>Semi-monthly</option><option value={30}>Monthly</option>
-                </select>
-              </div>
-              <div>
-                <div style={S.slabel}>Default Roth IRA contribution</div>
-                <input type="number" inputMode="decimal" style={S.iy} value={settings.rothRecurring||500}
-                  onChange={e=>{const next={...settings,rothRecurring:parseFloat(e.target.value)||0};setSettings(next);save("v3_settings",next);}}/>
-              </div>
-            </div>
 
-            {/* CATEGORIES */}
-            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <div style={S.ptitle}>Categories</div>
-                <button style={S.btn("#6366F1")} onClick={()=>{
-                  const newCat={id:"cat_"+Date.now(),label:"New Category",color:"#6366F1",bg:autoBg("#6366F1")};
-                  const next=[...cats,newCat]; setCats(next); save("v3_cats",next);
-                }}>+ Add</button>
-              </div>
-              <div style={{display:"grid",gap:8}}>
-                {cats.map(cat=>(
-                  <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
-                    <input type="color" value={cat.color} style={{width:28,height:28,border:"none",borderRadius:4,cursor:"pointer",padding:0,background:"none"}}
-                      onChange={e=>{const col=e.target.value;const next=cats.map(c=>c.id===cat.id?{...c,color:col,bg:autoBg(col)}:c);setCats(next);save("v3_cats",next);}}/>
-                    <input type="text" value={cat.label} style={{...S.input,flex:1}}
-                      onChange={e=>{const next=cats.map(c=>c.id===cat.id?{...c,label:e.target.value}:c);setCats(next);save("v3_cats",next);}}/>
-                    <button onClick={()=>{
-                      if(cats.length<=1) return;
-                      const next=cats.filter(c=>c.id!==cat.id); setCats(next); save("v3_cats",next);
-                    }} style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:18,padding:"0 4px",flexShrink:0}}>×</button>
+                {/* Appearance */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:16}}>Appearance</div>
+                  <div style={S.slabel}>Accent color</div>
+                  <div style={{display:"flex",gap:10,marginTop:8,flexWrap:"wrap"}}>
+                    {ACCENT_COLORS.map(c=>(
+                      <button key={c.v} onClick={()=>upd({accentColor:c.v})}
+                        style={{width:36,height:36,borderRadius:10,background:c.v,border:accent===c.v?`3px solid #0F172A`:"3px solid transparent",cursor:"pointer",boxShadow:accent===c.v?`0 0 0 2px #FFF,0 0 0 4px ${c.v}`:"none",transition:"all 0.15s"}}
+                        title={c.n}/>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16,marginTop:4}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={S.ptitle}>Flag keywords for review</div>
-              </div>
-              <div style={{fontSize:11,color:"#64748B",marginBottom:10}}>Transactions matching these keywords are unchecked by default and highlighted for review on import.</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
-                {(settings.flagKeywords||[]).map((kw,i)=>(
-                  <div key={i} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:20,padding:"3px 10px",fontSize:12}}>
-                    <span style={{color:"#78350F",fontWeight:600}}>{kw}</span>
-                    <button onClick={()=>{const next={...settings,flagKeywords:(settings.flagKeywords||[]).filter((_,j)=>j!==i)};setSettings(next);save("v3_settings",next);}}
-                      style={{background:"none",border:"none",color:"#B45309",cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                </div>
+
+                {/* Pay schedule */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:16}}>Pay schedule</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14}}>
+                    <div>
+                      <div style={S.slabel}>Job start date</div>
+                      <input type="date" style={S.iy} value={settings.jobStart} onChange={e=>upd({jobStart:e.target.value})}/>
+                    </div>
+                    <div>
+                      <div style={S.slabel}>First paycheck date</div>
+                      <input type="date" style={{...S.iy,borderColor:settings.firstPaycheck?"#EF9F27":"#E24B4A"}} value={settings.firstPaycheck||""} onChange={e=>upd({firstPaycheck:e.target.value})}/>
+                      <div style={{fontSize:10,color:settings.firstPaycheck?"#64748B":"#A32D2D",marginTop:4}}>{settings.firstPaycheck?"Pay dates calculated from here":"Set this when HR confirms"}</div>
+                    </div>
+                    <div>
+                      <div style={S.slabel}>Pay cycle</div>
+                      <select style={S.sel} value={settings.payCycle||14} onChange={e=>upd({payCycle:parseInt(e.target.value)})}>
+                        <option value={7}>Weekly</option><option value={14}>Biweekly</option>
+                        <option value={15}>Semi-monthly</option><option value={30}>Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={S.slabel}>Default Roth IRA / mo</div>
+                      <input type="number" inputMode="decimal" style={S.iy} value={settings.rothRecurring||500} onChange={e=>upd({rothRecurring:parseFloat(e.target.value)||0})}/>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:8}}>
-                <input type="text" style={{...S.input,flex:1}} placeholder="Add keyword (e.g. Amex Send)"
-                  onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){const next={...settings,flagKeywords:[...(settings.flagKeywords||[]),e.target.value.trim()]};setSettings(next);save("v3_settings",next);e.target.value="";}}}/>
-                <button style={S.btn("#BA7517")} onClick={e=>{const inp=e.target.previousSibling;if(inp.value.trim()){const next={...settings,flagKeywords:[...(settings.flagKeywords||[]),inp.value.trim()]};setSettings(next);save("v3_settings",next);inp.value=""}}}>+ Add</button>
-              </div>
-            </div>
-            <div style={{borderTop:"1px solid #E8E6E0",paddingTop:16,marginTop:4}}>
-              <div style={S.ptitle}>Danger zone</div>
-              <button style={{...S.btn("#E24B4A"),fontSize:12}} onClick={clearAllData}>
-                🗑 Clear all transaction data
-              </button>
-              <div style={{fontSize:10,color:"#94A3B8",marginTop:6}}>Removes all transactions across all months. Settings, budgets, and categories are kept.</div>
-            </div>
+                </div>
+
+                {/* Categories */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px"}}>Categories</div>
+                    <button style={S.btn(accent)} onClick={()=>{const nc={id:"cat_"+Date.now(),label:"New Category",color:accent,bg:autoBg(accent)};const next=[...cats,nc];setCats(next);save("v3_cats",next);}}>+ Add</button>
+                  </div>
+                  <div style={{display:"grid",gap:8}}>
+                    {cats.map(cat=>(
+                      <div key={cat.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#F8FAFC",borderRadius:8,border:"1px solid #E2E8F0"}}>
+                        <div style={{width:12,height:12,borderRadius:3,background:cat.color,flexShrink:0}}/>
+                        <input type="text" value={cat.label} style={{...S.input,flex:1,background:"transparent",border:"none",padding:"0",fontSize:13,fontWeight:500}}
+                          onChange={e=>{const next=cats.map(c=>c.id===cat.id?{...c,label:e.target.value}:c);setCats(next);save("v3_cats",next);}}/>
+                        <input type="color" value={cat.color} style={{width:24,height:24,border:"none",borderRadius:4,cursor:"pointer",padding:0,background:"none",flexShrink:0}}
+                          onChange={e=>{const col=e.target.value;const next=cats.map(c=>c.id===cat.id?{...c,color:col,bg:autoBg(col)}:c);setCats(next);save("v3_cats",next);}}/>
+                        <button onClick={()=>{if(cats.length<=1)return;const next=cats.filter(c=>c.id!==cat.id);setCats(next);save("v3_cats",next);}}
+                          style={{background:"none",border:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0}}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Flag keywords */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:6}}>Import — flag for review</div>
+                  <div style={{fontSize:11,color:"#94A3B8",marginBottom:12}}>Matching transactions are unchecked by default and highlighted on import.</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                    {(settings.flagKeywords||[]).map((kw,i)=>(
+                      <div key={i} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#FEF3C7",border:"1px solid #F59E0B",borderRadius:20,padding:"4px 12px",fontSize:12}}>
+                        <span style={{color:"#78350F",fontWeight:600}}>{kw}</span>
+                        <button onClick={()=>upd({flagKeywords:(settings.flagKeywords||[]).filter((_,j)=>j!==i)})}
+                          style={{background:"none",border:"none",color:"#B45309",cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <input type="text" style={{...S.input,flex:1}} placeholder="Add keyword (e.g. Amex Send)"
+                      onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){upd({flagKeywords:[...(settings.flagKeywords||[]),e.target.value.trim()]});e.target.value="";}}}/>
+                    <button style={S.btn("#BA7517")} onClick={e=>{const inp=e.target.previousSibling;if(inp.value.trim()){upd({flagKeywords:[...(settings.flagKeywords||[]),inp.value.trim()]});inp.value=""}}}>+ Add</button>
+                  </div>
+                </div>
+
+                {/* Data & export */}
+                <div style={{...S.card,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:16}}>Data & export</div>
+                  <button style={{...S.btn("#6366F1"),marginBottom:8,display:"block"}} onClick={()=>setShowExport(v=>!v)}>{showExport?"Hide":"Show"} export</button>
+                  {showExport&&<textarea readOnly value={exportData()} style={{...S.input,height:160,fontFamily:"monospace",fontSize:10,resize:"vertical",marginTop:8}}/>}
+                </div>
+
+                {/* Danger zone */}
+                <div style={{...S.card,border:"1.5px solid #FCA5A544"}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#991B1B",textTransform:"uppercase",letterSpacing:"0.7px",marginBottom:12}}>Danger zone</div>
+                  <button style={{...S.btn("#E24B4A"),fontSize:12}} onClick={clearAllData}>🗑 Clear all transaction data</button>
+                  <div style={{fontSize:10,color:"#94A3B8",marginTop:6}}>Removes all transactions. Settings, budgets, and categories are kept.</div>
+                </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
-        {/* EXPORT */}
-        {showExport&&(
-          <div style={{...S.card,marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-              <div style={S.ptitle}>Export</div>
-              <button style={S.btn("#64748B")} onClick={()=>setShowExport(false)}>Close</button>
-            </div>
-            <textarea readOnly value={exportData()} style={{...S.input,height:200,fontFamily:"monospace",fontSize:11,resize:"vertical"}}/>
-            <div style={{fontSize:11,color:"#64748B",marginTop:6}}>Copy and save this as your backup.</div>
-          </div>
-        )}
 
         {/* ══ OVERVIEW ══ */}
         {tab==="overview"&&(<>
@@ -2157,7 +2184,7 @@ export default function App(){
           </div>
         </>)}
 
-        </>} {/* end !drillCat */}
+        </>} {/* end !drillCat && !showSettings */}
 
       </div>
 
